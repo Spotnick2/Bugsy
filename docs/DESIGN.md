@@ -62,7 +62,8 @@ Exactly one provider owns each kind at any moment.
 | **native** | our handler | no collector global at our file load (the intended setup) |
 | **collector** | another error collector's per-error callback (`Capture.COLLECTOR`) | that collector's global with its API present at file load, or appearing later from any other mode |
 | **displaced** | possibly nobody: Bugsy says it is unsure | the handler changed and no error has reached our handler since |
-| **chained** | our handler, through another addon's wrapper | displaced, then an error reached our handler (several UI suites and large addons wrap the previous handler) |
+| **chained** | our handler, through another addon's wrapper | displaced, then a real error (one with a client error height) reached our handler (several UI suites and large addons wrap the previous handler) |
+| **front** | our front handler, installed **ahead** of that wrapper, which it passes each error on to | displaced or chained, no collector, and Bugsy's one attempt this session succeeded (D14) |
 
 `LUA_WARNING` and `ADDON_ACTION_*` belong to **our event frame in every mode**. In collector
 mode, the collector's copies of them (messages starting `LUA_WARNING: ` or `[ADDON_ACTION_`; the
@@ -72,17 +73,53 @@ locale, with no once-per-addon limit and no takeover window to double-count (Fab
 **Detection.** At every `ADDON_LOADED`, at `PLAYER_LOGIN`, at the start of every drain and when
 the window opens, `geterrorhandler() ~= ourHandler` means only "the handler changed" (P11 checks
 the comparison is reliable). It is a transition, not a verdict: the mode becomes displaced, and
-the next error reaching our handler makes it chained. A late replacement between checks is seen at
-the next drain or window open. Bugsy never re-takes the handler: that is a choice (it would fight
-the addon that set it), not an impossibility (we load before an embedded copy and could keep the
-original setter). Bugsy records a
+the next real error reaching our handler makes it chained. A late replacement between checks is
+seen at the next drain or window open. Then Bugsy tries once to go in front (below). Bugsy records a
 transition only when the current handler differs from the last one recorded:
-`handlerChanges` keeps the last 5 `{ at, afterAddon }` and counts older ones in
+`handlerChanges` keeps the last 5 `{ at, afterAddon, action }` (`action = "front"` for our own
+front installation) and counts older ones in
 `handlerChangesDropped`. It enters collector mode only when the collector's global exists
 **and** its API checks out: `GetDB`, `GetErrorByID` and `GetSessionId` are functions, and so is
 `EventRegistry.RegisterCallback`. It never claims the new handler *is* the collector's; the status
-line says it is "reading from another error collector". Otherwise: displaced. Bugsy never
-re-takes the handler.
+line says it is "reading from another error collector". Otherwise: displaced, then front.
+
+**Liveness evidence.** A call counts as an error delivered through the installed handler only
+when `GetErrorCallstackHeight()` is a number at that moment: the client has an error in flight
+(measured, FOREVER-PROBE §7: nil for a direct `geterrorhandler()(msg)` call and for `xpcall`). A
+nil-height call, typically a library holding our original handler, is recorded and changes
+neither the mode nor the evidence a check reads. While our front is installed the mode stays
+front. Collector mode is never left from a handler.
+
+**Front (D14; Codex design review, three rounds, 2026-11-17).** An addon that wraps the handler can
+keep some errors for itself or stop passing errors on (measured in the owner's setup, §7). So,
+in a check, when the mode is displaced or chained, no collector API is usable, the saved setting
+`front` is on (read **once a session**, at our `ADDON_LOADED`; `/bugsy front` changes the next
+session) and this session has not tried yet, Bugsy:
+1. marks the attempt (one a UI session, success or not), keeps the current handler as its next
+   handler (never changed afterwards), and calls the **current** global setter with
+   `Capture.front` under `pcall`;
+2. counts it installed only if `geterrorhandler() == Capture.front` afterwards, whether the
+   setter returned or threw (a collector's no-op setter fails this; nothing is restored), and
+   records the transition with `action = "front"`.
+
+`Capture.front` runs, in this order: the **passing guard** (while it is passing an error on, any
+call into either of our entry points is not recorded: the first call with the same message is the
+wrapper passing it back, `passReturned`; any other is a distinct report made meanwhile, dropped and
+counted as a loss, `passSuppressed`, which the status and reports include);
+**collector exclusion** (in collector mode no native capture, `nativeInCollector`, but it still
+passes on); the busy guard; liveness; capture with the **same nesting as the handler**
+(front → `pcall` → body, so the measured levels and `FALLBACK_LEVEL` hold); then **passing on**,
+synchronously and once, `pcall(next, msg, ...)` with every argument (failures counted,
+`forwardFailed`, never rethrown). Our original handler runs the same guards, in the same order.
+
+Best effort, stated in the limits: a wrapper that **defers** its pass-on reaches our original
+handler later and is recorded a second time; a distinct report made **synchronously** while the
+wrapper runs is dropped; the wrapper's own stack levels may be off by Bugsy's frames (it computes
+them itself; fixed offsets point at our frames); its code runs **outside Bugsy's budget** (the
+critical path's bounds cover Bugsy's own work only). A later wrapper that saves our front is
+noticed (displaced, then chained when a real error reaches the front through it); there is no
+second attempt, so the chain later wrapper → front → first wrapper stays intact. Each sample
+records how it arrived: `entry = "handler" | "front" | "event" | "collector"`.
 
 **Backfill and counting.** The collector's error objects are mutable and cumulative: `counter` grows
 across sessions (a repeat from another session moves the object to this session **without**
@@ -114,7 +151,7 @@ raised while reconciling.
 - A brand-new object seen live (counter 1) is this very error: it counts exactly. Locals from
   the collector (which always captures them) are copied only when Bugsy's locals setting is on.
 
-**Limits of collector mode**, shown in the status line and carried in every report
+**Limits of collector mode**, printed by `/bugsy status` and carried in every report
 (`capture.limits`): secret messages are not stored by the collector; past 10 errors a second it drops
 everything, uncounted; stacks may come from an earlier repeat; no breadcrumb cursor at error time.
 
@@ -413,3 +450,5 @@ flushes SavedVariables (reload, logout).
 | D11 | A changed handler is "displaced" until liveness says "chained" | Fable review: chaining wrappers are common; displaced was a false alarm |
 | D12 | Signatures parse the first path per line, skip our own frames | Fable review: the measured line format names the definition line second |
 | D13 | Per-session cap of 150 new problems; stackless problems for flood heads | Fable review: a unique flood must neither erase old evidence nor lose its messages |
+| D14 | Front mode: once a session, Bugsy installs itself ahead of a wrapper and passes each error on (setting `front`, on by default). Replaces "Bugsy never re-takes the handler" | Owner, after the `stacks` run found a wrapper that keeps and cuts off errors; design agreed with Codex in three rounds |
+| D15 | Correctness never depends on translated client text: events, API values and locale-independent prefixes only. English text is matched only where a miss degrades gracefully (an explanation not shown, a "named" attribution falling back to the stack) | Owner: Bugsy must work with every localized client |

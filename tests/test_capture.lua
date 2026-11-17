@@ -195,7 +195,9 @@ local ep = early.Store.List("all", true)
 eq(#ep, 1, "the loading-time error reached the store")
 eq(ep[1].first[1].session, BugsyDB.session, "in the current session")
 
--- Displacement: another handler replaces ours, without a collector API.
+-- Displacement: another handler replaces ours, without a collector API. Front mode
+-- (putting Bugsy ahead of it) has its own tests (test_front); off here.
+early.Capture.state.frontEnabled = false
 local other = function() end
 WoW.handler = other
 early.Capture.check("SomeAddon")

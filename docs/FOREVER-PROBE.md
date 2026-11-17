@@ -130,6 +130,7 @@ ships as "verified" until it is measured.
 | P10 | Does unregistering `ADDON_ACTION_*` from `UIParent`/`GameEvent` and `LUA_WARNING` from `ScriptErrorsFrame` taint anything on Forever? | Whether Bugsy suppresses Blizzard's popups as the collector does |
 | P11 | `geterrorhandler()` identity: after we install, does it return our function, and can we tell when someone replaced it? | Detecting a takeover |
 | P12 | Clipboard and EditBox: does Ctrl+C from a read-only multi-line EditBox give back `\|` sequences, tabs, UTF-8 and a 60 KB text exactly as set? How long does `SetText` take for 64 KB? | Export fidelity |
+| P15 | Localization: on a non-English client, are the client-generated texts Bugsy matches translated? `(a secret ... value, while execution tainted by 'X')`, `tainted by 'X'`, `Auras cannot be accessed when secret`, `UNKNOWN ERROR`. Lua core messages and stack lines are expected to stay English. | Only explanations and the "named" attribution depend on them (D15); correctness must not |
 
 Added after Codex round 1:
 - **P2** also measures the real structure: the handler body inside `pcall`, the level computed in
@@ -141,7 +142,8 @@ Added after Codex round 1:
   backfill window), repeats while the collector's counter changes, duplicate warnings/actions during
   the switch. Each variant in a fresh `/reload`: the collector's no-op `seterrorhandler` makes
   restoring a handler in the same session impossible for code that did not keep the original
-  setter (the probe); Bugsy could keep it, and chooses not to re-take the handler.
+  setter (the probe). Bugsy never uses a cached setter: front mode (D14) calls the current one,
+  so a collector's no-op setter simply makes the front attempt fail.
 - **P8**: sustained floods across many frames, very large message strings, and (with Bugsy
   loaded) all-muted capacity and the quality of the first-2/last-3 samples.
 - **P9**: a failure in the scheduling call and in the recovery path; `busy` resets and the next
@@ -224,8 +226,9 @@ naming it, outside its libraries) and does not pass them on; and **stops passing
 after about 1 000 errors that are not its own, more than 10 s after startup. So in this setup
 Bugsy runs in chained mode, cannot see that addon's own errors, and goes blind after a flood. The
 `floods` procedure would trigger that limit: run it with that addon disabled, or as a deliberate
-measurement of the limit. Whether Bugsy should place itself in front of such a wrapper (chaining
-to it, so both still see every error) is an owner decision (DESIGN §3, "never re-takes").
+measurement of the limit. **Owner decision (2026-11-17):** Bugsy puts itself in front of such a
+wrapper and passes each error on (front mode, DESIGN §3, D14). Its in-game checks are the `front`
+and `frontown` procedures (P7, P6).
 
 ### `secrets` (P1): build 70959, 2026-11-17
 
@@ -264,3 +267,52 @@ each reaching the probe's measuring handler alone. Blizzard showed nothing (owne
 - **Not covered:** `taintLog` was off, so taint lines from the handler were not looked for. The
   front design's `frontown` procedure runs with `taintLog` on and covers that (and installing a
   handler in combat).
+
+### Front mode: what the procedures check (P7, P6)
+
+- `front` (the wrapper addon enabled, no collector, fresh reload): Bugsy is in front at the
+  start; an ordinary error, one matching the wrapper's own-error filter (the word typed with
+  `/fp bugsy keyword`), one with locals, and a direct report are each recorded, with the raise
+  site as the first location; 1 100 errors past the wrapper's cutoff, then a marker still
+  recorded (its tier noted).
+- `frontown` (the wrapper addon disabled, `taintLog 1`, fresh reload): in combat, the probe
+  installs its own chaining wrapper and Bugsy installs itself in front of it **in combat**; a
+  real error and a direct report, with the probe's wrapper recording the error height, call
+  height and stack it sees downstream (offsets documented from the result); a distinct report
+  made by that wrapper while handling one is dropped (`passSuppressed` +1; the wrapper's
+  normal pass-back counts as `passReturned`); a throwing wrapper is counted (`forwardFailed`) and the next error is
+  still recorded; a later wrapper saving the front gets no second front and the error is recorded
+  once. Afterwards the taint log (`Logs\taint.log`) is read for lines naming Bugsy or the probe.
+
+### `front` and `frontown` (P7, P6): build 70959, 2026-11-17
+
+Run on the front-mode branch before the `passReturned` split (`passSuppressed` then also counted
+the wrapper's pass-backs). Both procedures: all checks passed.
+
+**`front`** (the wrapper addon enabled, no collector, fresh reload):
+- **[game, 70959]** Bugsy was in front at the start (`mode=front`, installed after the wrapper
+  addon's load). An ordinary error, an error matching the wrapper's own-error filter, an error
+  with locals (kept) and a direct report were each recorded once, `entry=front`, full tier, with
+  the raise site as the first location (the direct report: its caller).
+- **[game, 70959]** 1 100 identical errors over about 2 s: the wrapper passed **1 000** back
+  (`passSuppressed` = 1 000 at the end, all pass-backs then) and stopped: its cutoff, measured.
+  Bugsy kept capturing: 173 occurrences sampled at full or top tier, the rest counted, and a
+  marker raised afterwards was recorded at full tier. That addon showed nothing (owner).
+
+**`frontown`** (the wrapper addon disabled, `taintLog 1`, fresh reload, in combat):
+- **[game, 70959]** Bugsy installed its front ahead of the probe's wrapper **in combat**, from
+  the drain's check, within a second of the first error. No blocked action or "interface action
+  failed" message (owner), and nothing was written to `Logs\taint.log` while `taintLog` was 1
+  (Bugsy recorded the CVar as `"1"` with these errors; the file's last write predates the run).
+- **[game, 70959]** **Downstream stack levels hold for real errors:** the probe's wrapper, called
+  through the front, computed its level with Blizzard's formula and landed on the raise site
+  (`callH` 6, `errH` 1, level 6; 4 before the front existed). The front and its `pcall` add two
+  levels to both sides. For a **direct report** (no error height) a handler using a fixed level
+  sees Bugsy's frames: `debugstack(2)` starts `[C]: ?`, then `!Bugsy/Capture.lua` (the front),
+  then the caller: the documented offset.
+- **[game, 70959]** A distinct report made by the wrapper while handling an error was not
+  recorded and was counted. A wrapper that threw was counted (`forwardFailed` 1) and the next
+  error was still recorded. A later wrapper saving the front: the error was recorded once,
+  through the later wrapper, the front and the first wrapper; no second front; mode chained.
+  Behind that later tail-calling wrapper the downstream stack started with `[C]: in function
+  'error'` (the measured one-level shift).

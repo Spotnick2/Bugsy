@@ -31,11 +31,16 @@ client            { flavor ("forever"), version ("1.60.1"), build ("70959"), int
                     locale, projectId }
                   -- observed when the report is prepared; each occurrence has its own build
 
-capture           { mode ("native" | "collector" | "displaced" | "chained"),  -- at preparation time
-                    handlerChanges = [ { at, afterAddon } ], handlerChangesDropped,  -- last 5
+capture           { mode ("native" | "collector" | "displaced" | "chained" | "front"),
+                                     -- at preparation time; it does not describe older samples
+                                     -- (each occurrence's `entry` says how it arrived)
+                    handlerChanges = [ { at, afterAddon, action ("front" | absent) } ],
+                    handlerChangesDropped,                           -- last 5
                     limits = [ "<text>" ],                           -- what the mode cannot do
                     localsEnabled,
-                    session = { suppressed = { [kind] = n }, queueDropped },   -- this session,
+                    session = { suppressed = { [kind] = n }, queueDropped,     -- this session,
+                                passSuppressed,   -- front: distinct reports dropped while passing on
+                                forwardFailed },  -- front: the next handler failed
                                                                      -- all problems together
                     lifetime = { evicted } }
 
@@ -54,6 +59,7 @@ problem           { id, kind ("error" | "warning" | "blocked" | "forbidden" | "h
 occurrences       [ {                                 -- the first 2 and the last 3 kept
                     at, atApproximate (bool), uptime, session, build,
                     provider ("native" | "collector" | "library"),
+                    entry ("handler" | "front" | "event" | "collector"),  -- how it reached Bugsy
                     tier ("full" | "top"), stackOrigin ("error" | "fallback" | "report-site" |
                          "supplied" | "collector" | "none"),
                     observedAt,                       -- when Bugsy read it (differs in collector mode)

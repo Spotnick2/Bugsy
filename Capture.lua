@@ -35,7 +35,7 @@ Capture.COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
 -- State ----------------------------------------------------------------------
 
 local S = {
-    mode = "native",          -- "native" | "collector" | "displaced" | "chained"
+    mode = "native",          -- "native" | "collector" | "displaced" | "chained" | "front"
     busy = false, nested = 0, failures = 0, failureLog = {},
     queue = {}, head = 1, tail = 0,
     counts = {}, countKeys = 0,
@@ -44,7 +44,12 @@ local S = {
     changes = {}, changesDropped = 0, lastHandler = false,   -- false: nothing recorded yet (a handler can be nil)
     water = setmetatable({}, { __mode = "k" }),
     settings = { locals = false },
-    stats = { suppressed = {}, queueDropped = 0, drainFailed = 0, scheduleFailed = 0, countDropped = 0 },
+    stats = { suppressed = {}, queueDropped = 0, drainFailed = 0, scheduleFailed = 0, countDropped = 0,
+        passSuppressed = 0, passReturned = 0, forwardFailed = 0, nativeInCollector = 0 },
+    passing = false,
+    frontEnabled = nil,       -- set once a session from the saved setting (Bugsy.lua); nil: never front
+    frontTried = false,       -- one attempt a UI session
+    nextHandler = nil,        -- the handler front passes on to; never changed after the attempt
 }
 for _, k in ipairs(Capture.KINDS) do S.stats.suppressed[k] = 0 end
 Capture.state = S
@@ -216,7 +221,7 @@ end
 -- debuglocals are called DIRECTLY from here: through pcall, its C frame would be
 -- level 1 and every level one short (Blizzard's own handler calls them directly).
 -- If one of them throws, the body's pcall counts the failure.
-local function body(kind, msg, event)
+local function body(kind, msg, event, entry)
     local now = API.Uptime()
     local stored, text = messageOf(msg)
     local key = text and messageKey(kind, text) or nil
@@ -238,6 +243,7 @@ local function body(kind, msg, event)
     end
 
     local rec = { kind = kind, tier = tier, provider = "native", stackOrigin = origin,
+        entry = entry or (event and "event") or "handler",
         message = stored, uptime = now, key = key, event = event }
     local debugstack = G("debugstack")
     if debugstack then
@@ -259,19 +265,82 @@ local function body(kind, msg, event)
 end
 Capture._body = body
 
-function Capture.handler(msg)
-    if S.busy then S.nested = S.nested + 1; return end
-    -- Liveness: remember which handler was installed when an error reached us. If
-    -- it is not ours, another addon's handler chains to ours (DESIGN §3), whether
-    -- or not a check has noticed the change yet (Codex round 5).
+-- Liveness (DESIGN §3): remember which handler was installed when a real error
+-- reached us. Only a call made while the client has an error in flight
+-- (GetErrorCallstackHeight() a number; nil for a direct geterrorhandler()(msg)
+-- call, measured in FOREVER-PROBE §7) is evidence that the installed handler passed
+-- it on. A nil-height call records the error and changes nothing here. Collector
+-- mode is never left from here.
+local function liveness()
+    if S.mode == "collector" then return end
+    local eh = G("GetErrorCallstackHeight")
+    local h = eh and eh()
+    if type(h) ~= "number" or not Safe.readable(h) then return end
     local get = G("geterrorhandler")
     local current = get and get()
+    if current == Capture.front then return end            -- our front is installed: mode stays
     S.aliveVia = current
-    if current ~= Capture.handler and (S.mode == "displaced" or S.mode == "native") then S.mode = "chained" end
+    if current ~= Capture.handler and (S.mode == "displaced" or S.mode == "native" or S.mode == "front") then
+        S.mode = "chained"
+    end
+end
+
+-- A call into Bugsy while the front passes an error on. The first call with that
+-- same message is the next handler passing it back (expected: passReturned); any
+-- other is a distinct report made meanwhile, dropped (passSuppressed, a loss the
+-- status and reports state). An unreadable message cannot be compared: its first
+-- re-entry counts as the return.
+local function whilePassing(msg)
+    local same = true
+    if Safe.readable(msg) and Safe.readable(S.passingMsg) then same = rawequal(msg, S.passingMsg) end
+    if same and not S.passReturnedOnce then
+        S.passReturnedOnce = true
+        S.stats.passReturned = S.stats.passReturned + 1
+    else
+        S.stats.passSuppressed = S.stats.passSuppressed + 1
+    end
+end
+
+-- Our original handler. Order (Codex, front design): the passing guard, collector
+-- exclusion, the busy guard, liveness, capture.
+function Capture.handler(msg)
+    if S.passing then whilePassing(msg); return end
+    if S.mode == "collector" then S.stats.nativeInCollector = S.stats.nativeInCollector + 1; return end
+    if S.busy then S.nested = S.nested + 1; return end
+    liveness()
     S.busy = true
     local ok, err = pcall(body, "error", msg)
     S.busy = false
     if not ok then fail(err) end
+end
+
+-- The front handler: installed ahead of another addon's handler (DESIGN §3, D14).
+-- It captures (front -> pcall -> body: the same nesting as Capture.handler, so the
+-- measured levels hold), then passes the call on, synchronously and once, to the
+-- handler it replaced. Best effort: a distinct report made synchronously while that
+-- handler runs is dropped and counted (passSuppressed); a handler that defers its
+-- pass-on reaches Capture.handler later and is recorded again. The next handler runs
+-- outside Bugsy's budget; its failures are counted, never rethrown.
+function Capture.front(msg, ...)
+    if S.passing then whilePassing(msg); return end
+    if S.mode == "collector" then
+        S.stats.nativeInCollector = S.stats.nativeInCollector + 1
+    elseif S.busy then
+        S.nested = S.nested + 1
+    else
+        liveness()
+        S.busy = true
+        local ok, err = pcall(body, "error", msg, nil, "front")
+        S.busy = false
+        if not ok then fail(err) end
+    end
+    local nextH = S.nextHandler
+    if nextH then
+        S.passing, S.passingMsg, S.passReturnedOnce = true, msg, false
+        local okF, errF = pcall(nextH, msg, ...)
+        S.passing, S.passingMsg = false, nil
+        if not okF then S.stats.forwardFailed = S.stats.forwardFailed + 1; fail(errF) end
+    end
 end
 
 -- Events: LUA_WARNING and ADDON_ACTION_*, owned by our frame in EVERY mode (the
@@ -384,7 +453,7 @@ function Capture.readCollector(bg, obj, live)
     else
         locals = diagnosticOf(rawLocals, Capture.LIMIT.locals)
     end
-    local rec = { kind = "error", tier = "full", provider = "collector", stackOrigin = "collector",
+    local rec = { kind = "error", tier = "full", provider = "collector", stackOrigin = "collector", entry = "collector",
         message = stored, key = text and messageKey("error", text) or nil,
         stack = diagnosticOf(rawget(obj, "stack"), Capture.LIMIT.stack), locals = locals,
         count = add, countIncomplete = incomplete or nil, uptime = API.Uptime() }
@@ -434,12 +503,12 @@ end
 -- Install and watch -----------------------------------------------------------------
 
 -- Records a transition: only when the current handler differs from the last one recorded.
-local function noteChange(afterAddon)
+local function noteChange(afterAddon, action)
     local current = G("geterrorhandler") and G("geterrorhandler")()
     if current == S.lastHandler then return end
     S.lastHandler = current
     local list = S.changes
-    list[#list + 1] = { at = API.Now(), afterAddon = afterAddon }
+    list[#list + 1] = { at = API.Now(), afterAddon = afterAddon, action = action }
     if #list > Capture.CHANGES_KEPT then
         table.remove(list, 1)
         S.changesDropped = S.changesDropped + 1
@@ -465,23 +534,50 @@ function Capture.install()
     return S.mode
 end
 
+-- One attempt a UI session to install the front handler ahead of `current` (DESIGN
+-- §3, D14). The attempt is marked first; success is defined only by the verified
+-- identity afterwards, whether the setter returned or threw. The current global
+-- setter is used (a collector's no-op setter makes it fail; nothing is restored).
+local function tryFront(current, afterAddon)
+    if S.frontTried or S.frontEnabled ~= true then return end
+    if type(current) ~= "function" or current == Capture.handler or current == Capture.front then return end
+    S.frontTried = true
+    local set, get = G("seterrorhandler"), G("geterrorhandler")
+    if not set or not get then return end
+    S.nextHandler = current
+    pcall(set, Capture.front)
+    local okG, now = pcall(get)
+    if okG and now == Capture.front then
+        S.mode = "front"
+        noteChange(afterAddon, "front")
+    else
+        S.nextHandler = nil
+    end
+end
+Capture._tryFront = tryFront
+
 -- At every ADDON_LOADED, at PLAYER_LOGIN, in every drain and when the window opens.
--- A changed handler is a transition, not a verdict: "displaced" until an error
--- still reaches our handler ("chained", see Capture.handler), and the collector's API,
--- when it appears, is used from any of these modes. Bugsy never re-takes the
--- handler (a choice: re-taking would fight the addon that set it).
+-- A changed handler is a transition, not a verdict: "displaced" until a real error
+-- still reaches our handler ("chained", see liveness), and the collector's API, when
+-- it appears, is used from any of these modes. Otherwise Bugsy tries, once, to put
+-- its front handler ahead of the new one (D14; the passing-on keeps that addon
+-- working). It never takes the handler back without passing errors on.
 function Capture.check(afterAddon)
     if S.mode == "collector" then return S.mode end
     local get = G("geterrorhandler")
     local current = get and get()
-    if current ~= Capture.handler and current ~= S.lastHandler then
+    if current ~= Capture.handler and current ~= Capture.front and current ~= S.lastHandler then
         noteChange(afterAddon)
         -- an error already reached us through this very handler: chained, not displaced
         S.mode = (S.aliveVia == current) and "chained" or "displaced"
     end
-    if S.mode ~= "native" then
+    if S.mode ~= "native" and S.mode ~= "front" then
         local bg = Capture.collectorUsable()
-        if bg then Capture.useCollector(bg) end
+        if bg then
+            Capture.useCollector(bg)
+        elseif S.mode == "displaced" or S.mode == "chained" then
+            tryFront(current, afterAddon)
+        end
     end
     return S.mode
 end
@@ -500,6 +596,12 @@ function Capture.limits()
     elseif S.mode == "chained" then
         return { "Another addon's error handler passes errors on to Bugsy; stacks may start in its frames.",
             "That addon may keep some errors for itself, or stop passing errors on after a flood." }
+    elseif S.mode == "front" then
+        return { "Bugsy is installed ahead of another addon's error handler and passes each Lua error it "
+            .. "receives on to that handler after capturing it.",
+            "A different error that handler reports while it handles one is not recorded (counted as "
+            .. "dropped). If that handler passes errors on later rather than at once, Bugsy records them twice.",
+            "Stacks that handler records may be off by Bugsy's frames." }
     end
     return {}
 end
