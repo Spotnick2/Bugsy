@@ -331,3 +331,20 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   handler from inside its own call, the client counted that time against `!Bugsy`. Open: what the
   client does to an addon past that limit (only a warning, or its scripts stop), and whether Bugsy
   should bound or stop passing on to a next handler that keeps exceeding it.
+
+### `early` (P5): build 70959, 2026-11-17 (after the probe fix)
+
+- **[game, 70959]** `LoadSavedVariablesFirst` is honoured: the addon's saved table is a table at
+  file scope.
+- **[game, 70959]** A handler installed at file scope is called for an error raised later in the
+  same addon's file load.
+- **[game, 70959]** A `C_Timer.After(0)` scheduled during file load runs **after** that addon's
+  `ADDON_LOADED`. So Bugsy's drain, scheduled by an error before our `ADDON_LOADED`, finds the
+  store attached.
+- **[game, 70959]** **An error in a file's main chunk has `GetErrorCallstackHeight() == 0`**
+  (`callH` 4): Blizzard's formula gives level 5, past the stack, and an **empty** stack. The
+  chunk's line (`[...FileScope.lua]:19: in main chunk`) is at level 4, which height 1 gives.
+  **Fixed in Bugsy:** a height below 1 counts as 1 (test_capture, a fixture in test_fixtures).
+  Blizzard's own handler has the same formula, so its window likely shows an empty stack there.
+- Not measured here: an error from an addon loading **before** `!Bugsy` (P5's boundary: such an
+  error cannot be captured by a handler not yet installed).

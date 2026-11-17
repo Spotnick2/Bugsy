@@ -40,6 +40,13 @@ eq(S.failures, 1, "the failure is counted")
 WoW.stackCalls = {}
 WoW.raise("an ordinary error")
 eq(WoW.stackCalls[1].level, WoW.callHeight - (WoW.errorHeight - 1), "the level is the formula's, unshifted")
+-- An error in a file's main chunk while it loads: error height 0 (measured, P5).
+WoW.stackCalls = {}
+local savedEh = WoW.errorHeight
+WoW.errorHeight = 0
+WoW.raise("an error at file scope")
+eq(WoW.stackCalls[1].level, WoW.callHeight, "height 0 counts as 1: the chunk's own line, not one past the stack")
+WoW.errorHeight = savedEh
 
 -- A body that throws: counted, its readable string message kept (cut), busy cleared.
 reset()

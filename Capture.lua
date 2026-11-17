@@ -235,6 +235,10 @@ local function body(kind, msg, event, entry)
     local height = G("GetCallstackHeight")
     local eh = errHeight and errHeight() or nil
     if not event and type(eh) == "number" and Safe.readable(eh) and height then
+        -- An error in a file's main chunk, while it loads, has an error height of 0
+        -- (measured, P5, 70959): the formula then lands one past the stack, which is
+        -- empty. Height 1 lands on the chunk's line.
+        if eh < 1 then eh = 1 end
         level = height() - (eh - 1)
         origin = "error"
     else
