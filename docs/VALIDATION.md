@@ -57,6 +57,7 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | `coexist` | **Done, 70959.** P7: with the collector, collector mode and errors through it; without it, the embedding addon wraps the handler and Bugsy goes front | yes |
 | `popups` | **Done, 70959.** P4: the forbidden function is named (`TargetUnit()`); P10: with Blizzard's listeners unregistered, no popup. Taint of doing so not yet checked (B-18) | owner's decision |
 | `copy` | **Done, 70959.** P12: Bugsy's doubled-pipe display copies back to the original exactly (`|`, colour codes, UTF-8); raw text copies what is rendered; 63 KB identical. A tab's fate is unknown | Copy details part |
+| (owner, by hand) | **Done, 70959.** The six alert sounds (#19: 597938, 1859972-1859975, 550736) all play through `/bugsy sound 1-6` | no |
 | (passive) | P3: `LUA_WARNING` over a play session (`/fp bugsy warnings`) | payloads only |
 
 Plus the save/reload check of the release gate (BACKLOG): evidence, mute and clear state, session
