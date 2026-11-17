@@ -44,13 +44,16 @@ ns.Bugsy.Slash("notices on")
 
 -- A choice of sounds (#19): the owner's six, in order; a number picks one, saves its
 -- FileDataID, turns the sound on and plays it as a sample.
-eq(table.concat(ns.Bugsy.SOUNDS, ","), "597938,1859972,1859973,1859974,1859975,550736", "the six sounds, the default first")
+local ids = {}
+for i, s in ipairs(ns.Bugsy.SOUNDS) do ids[i] = s.id end
+eq(table.concat(ids, ","), "597938,1859972,1859973,1859974,1859975,550736", "the six sounds, the default first")
 ns.Bugsy.Slash("sound off")
 WoW.sounds = {}
 ns.Bugsy.Slash("sound 6")
 eq(BugsyDB.settings.soundId, 550736, "the choice is saved as its FileDataID")
 eq(BugsyDB.settings.sound, true, "choosing a sound turns it on")
 eq(WoW.sounds[1] and WoW.sounds[1][1], 550736, "and plays it")
+check(chatHas("is 6. Hotrod horn"), "and names it")
 WoW.sounds = {}
 WoW.advance(11)
 WoW.raise("a fifth new problem")
@@ -65,7 +68,10 @@ eq(BugsyDB.settings.soundId, 550736, "and changes nothing")
 check(chatHas("a number from 1 to 6"), "it says what is accepted")
 WoW.lines = {}
 ns.Bugsy.Slash("sound")
-check(chatHas("sound 6 of 6"), "/bugsy sound names the current choice")
+check(chatHas("1. Goblin klaxon"), "/bugsy sound lists the sounds by name")
+check(chatHas("5. Metal pops 4"), "all of them")
+check(chatHas("6%. Hotrod horn %(current%)"), "and marks the current one")
+check(not chatHas("Goblin klaxon %(current%)"), "only that one")
 eq(#WoW.sounds, 0, "without playing it")
 BugsyDB.settings.soundId = 12345           -- a saved id no longer in the list
 ns.Bugsy.Slash("sound on")

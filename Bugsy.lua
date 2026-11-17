@@ -13,7 +13,15 @@ Bugsy.NOTICE_EVERY = 10   -- seconds between chat notices
 -- Master channel. FileDataIDs play on Forever; built-in file paths are refused
 -- (References\Docs\PORTING-TBC-TO-FOREVER.md, PlaySoundFile). The first is the default;
 -- the setting saves the FileDataID, so reordering this list never changes a choice.
-Bugsy.SOUNDS = { 597938, 1859972, 1859973, 1859974, 1859975, 550736 }
+-- The client's sound names are in the comments; the names shown are ours.
+Bugsy.SOUNDS = {
+    { id = 597938,  name = "Goblin klaxon" },   -- EVENT_THIntro_GoblinKlaxon_Loop
+    { id = 1859972, name = "Metal pops 1" },    -- FX_Goblin_MetalPops01
+    { id = 1859973, name = "Metal pops 2" },    -- FX_Goblin_MetalPops02
+    { id = 1859974, name = "Metal pops 3" },    -- FX_Goblin_MetalPops03
+    { id = 1859975, name = "Metal pops 4" },    -- FX_Goblin_MetalPops04
+    { id = 550736,  name = "Hotrod horn" },     -- GoblinHotrod_Horn
+}
 Bugsy.SOUND_CHANNEL = "Master"
 
 local function say(msg)
@@ -28,13 +36,13 @@ Bugsy.say = say
 -- The chosen sound's place in the list; an unknown saved one falls back to the default.
 local function soundIndex(db)
     local id = db and db.settings.soundId
-    for i, s in ipairs(Bugsy.SOUNDS) do if s == id then return i end end
+    for i, s in ipairs(Bugsy.SOUNDS) do if s.id == id then return i end end
     return 1
 end
 
 local function playSound(db)
     local play = G("PlaySoundFile")
-    if play then pcall(play, Bugsy.SOUNDS[soundIndex(db)], Bugsy.SOUND_CHANNEL) end
+    if play then pcall(play, Bugsy.SOUNDS[soundIndex(db)].id, Bugsy.SOUND_CHANNEL) end
 end
 
 local function alertSound(db)
@@ -216,14 +224,21 @@ function Bugsy.Slash(msg)
         local db, n = Store.db(), tonumber(arg)
         if not db then return end
         if n and Bugsy.SOUNDS[n] then
-            db.settings.soundId, db.settings.sound = Bugsy.SOUNDS[n], true
-            say(("the sound for a new problem is sound %d of %d."):format(n, #Bugsy.SOUNDS))
+            db.settings.soundId, db.settings.sound = Bugsy.SOUNDS[n].id, true
+            say(("the sound for a new problem is %d. %s."):format(n, Bugsy.SOUNDS[n].name))
             playSound(db)
-        elseif arg == "on" or arg == "off" or arg == "" then
+        elseif arg == "on" or arg == "off" then
             local on = setting("sound", arg)
-            say(("the sound for a new problem is %s (sound %d of %d; /bugsy sound 1-%d to choose)."):format(
-                on and "on" or "off", soundIndex(db), #Bugsy.SOUNDS, #Bugsy.SOUNDS))
-            if on and arg == "on" then playSound(db) end
+            local i = soundIndex(db)
+            say(("the sound for a new problem is %s (%d. %s)."):format(on and "on" or "off", i, Bugsy.SOUNDS[i].name))
+            if on then playSound(db) end
+        elseif arg == "" then
+            local i = soundIndex(db)
+            say(("the sound for a new problem is %s. /bugsy sound <number> chooses one (and plays it):")
+                :format(db.settings.sound and "on" or "off"))
+            for k, s in ipairs(Bugsy.SOUNDS) do
+                say(("  %d. %s%s"):format(k, s.name, k == i and " (current)" or ""))
+            end
         else
             say(("/bugsy sound on|off, or a number from 1 to %d."):format(#Bugsy.SOUNDS))
         end

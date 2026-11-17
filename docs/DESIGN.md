@@ -399,7 +399,8 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
 - **Notifications**: one chat line per problem **on its first occurrence this session** (a bug
   from last week coming back today is announced, as the usual viewer does), at most one line every 10 s,
   held until combat ends, with an alert sound (one of the owner's six picks, FileDataIDs on the
-  Master channel, 597938 by default; `/bugsy sound on|off`, on by default; `/bugsy sound 1-6`
+  Master channel: a goblin klaxon by default, four metal pops, the earlier hotrod horn;
+  `/bugsy sound on|off`, on by default; `/bugsy sound` lists them by name, `/bugsy sound 1-6`
   chooses one and plays it, the setting saving its FileDataID; it follows the notice's throttle
   and combat hold, and plays even with chat notices off); never opens a window in combat. The minimap's addon
   compartment opens the window.
