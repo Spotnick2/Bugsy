@@ -316,3 +316,18 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   through the later wrapper, the front and the first wrapper; no second front; mode chained.
   Behind that later tail-calling wrapper the downstream stack started with `[C]: in function
   'error'` (the measured one-level shift).
+
+### The `early` run hung the client (2026-11-17): a probe bug, and what it showed about front mode
+
+- **Probe bug (fixed):** a record stored before `ADDON_LOADED` lives in the saved table already
+  (`LoadSavedVariablesFirst`), and the probe's boot then appended that table to itself while
+  iterating it: an endless loop (the client grew to about 7 GB and stopped responding). The
+  arming flag was never saved as cleared, so every reload hung again.
+- **[game, 70959] Front mode charges the next handler's time to Bugsy.** During that session Bugsy
+  recorded **85** `LUA_WARNING`s `insecure scripts exceeded execution limit for addon !Bugsy`
+  (location `!Bugsy/Capture.lua:-1`), and several `script ran too long` errors. The slow code was
+  downstream: the wrapper addon passed each error to the probe's measuring handler, whose
+  `table.remove(list, 1)` on the runaway table took seconds. Because the front calls the next
+  handler from inside its own call, the client counted that time against `!Bugsy`. Open: what the
+  client does to an addon past that limit (only a warning, or its scripts stop), and whether Bugsy
+  should bound or stop passing on to a next handler that keeps exceeding it.

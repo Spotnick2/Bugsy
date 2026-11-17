@@ -739,9 +739,16 @@ boot:SetScript("OnEvent", function(_, _, name)
     if type(BugsyProbeDB.log) ~= "table" then BugsyProbeDB.log = {} end
     Probe:UseLog(BugsyProbeDB.log, MAX_LOG)
     BugsyProbeDB.warnings = { count = 0, samples = {} }
-    if type(BugsyProbeDB.records) == "table" then
-        for _, r in ipairs(rec.records) do BugsyProbeDB.records[#BugsyProbeDB.records + 1] = r end
-        rec.records = BugsyProbeDB.records
+    -- A record stored before ADDON_LOADED (the early test) already lives in the saved
+    -- table (store() binds it: LoadSavedVariablesFirst). Appending a table to itself
+    -- while iterating it never ends: it hung the client (P5 run, 2026-11-17).
+    if type(BugsyProbeDB.records) == "table" and BugsyProbeDB.records ~= rec.records then
+        local saved, mine = BugsyProbeDB.records, rec.records
+        for i = 1, #mine do saved[#saved + 1] = mine[i] end
+        while #saved > MAX_RECORDS do table.remove(saved, 1) end
+        rec.records = saved
+    elseif type(BugsyProbeDB.records) == "table" then
+        while #rec.records > MAX_RECORDS do table.remove(rec.records, 1) end
     else
         BugsyProbeDB.records = rec.records
     end
