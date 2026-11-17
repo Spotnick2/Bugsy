@@ -19,7 +19,7 @@ check(chatHas("caught a new problem"), "the notice comes after combat")
 -- The alert sound: with the notice, the owner's FileDataID on Master, held in combat,
 -- throttled with the notice, its own setting.
 eq(#WoW.sounds, 1, "one sound with the notice, after combat (none during)")
-eq(WoW.sounds[1] and WoW.sounds[1][1], 550736, "the chosen sound")
+eq(WoW.sounds[1] and WoW.sounds[1][1], 597938, "the default sound (#19)")
 eq(WoW.sounds[1] and WoW.sounds[1][2], "Master", "on the Master channel")
 WoW.raise("another new problem, within the throttle")
 drain()
@@ -41,6 +41,36 @@ drain()
 eq(#WoW.sounds, 1, "the sound plays with chat notices off")
 check(not chatHas("caught"), "and no chat line")
 ns.Bugsy.Slash("notices on")
+
+-- A choice of sounds (#19): the owner's six, in order; a number picks one, saves its
+-- FileDataID, turns the sound on and plays it as a sample.
+eq(table.concat(ns.Bugsy.SOUNDS, ","), "597938,1859972,1859973,1859974,1859975,550736", "the six sounds, the default first")
+ns.Bugsy.Slash("sound off")
+WoW.sounds = {}
+ns.Bugsy.Slash("sound 6")
+eq(BugsyDB.settings.soundId, 550736, "the choice is saved as its FileDataID")
+eq(BugsyDB.settings.sound, true, "choosing a sound turns it on")
+eq(WoW.sounds[1] and WoW.sounds[1][1], 550736, "and plays it")
+WoW.sounds = {}
+WoW.advance(11)
+WoW.raise("a fifth new problem")
+drain()
+eq(WoW.sounds[1] and WoW.sounds[1][1], 550736, "the alert uses the choice")
+WoW.sounds = {}
+ns.Bugsy.Slash("sound 7")
+ns.Bugsy.Slash("sound 0")
+ns.Bugsy.Slash("sound loud")
+eq(#WoW.sounds, 0, "an unknown choice plays nothing")
+eq(BugsyDB.settings.soundId, 550736, "and changes nothing")
+check(chatHas("a number from 1 to 6"), "it says what is accepted")
+WoW.lines = {}
+ns.Bugsy.Slash("sound")
+check(chatHas("sound 6 of 6"), "/bugsy sound names the current choice")
+eq(#WoW.sounds, 0, "without playing it")
+BugsyDB.settings.soundId = 12345           -- a saved id no longer in the list
+ns.Bugsy.Slash("sound on")
+eq(WoW.sounds[1] and WoW.sounds[1][1], 597938, "an unknown saved sound falls back to the default")
+ns.Bugsy.Slash("sound 1")
 
 -- A known problem's first occurrence in a new session is announced again.
 WoW.reset()

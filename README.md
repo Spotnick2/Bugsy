@@ -24,8 +24,8 @@ understand and reports an author can act on.
 `/bugsy` (or the minimap's addon menu) opens the window. `/bugsy report` reports a problem with no
 error. `/bugsy locals on` captures local variables with new errors (off by default: they can contain
 names and messages). `/bugsy status` says how Bugsy is catching errors. A new problem plays a short
-sound and prints one chat line (at most one every 10 s, held during combat); `/bugsy sound off` and
-`/bugsy notices off` turn them off.
+sound and prints one chat line (at most one every 10 s, held during combat); `/bugsy sound 1-6`
+picks one of six sounds, and `/bugsy sound off` and `/bugsy notices off` turn them off.
 
 Bugsy replaces your error collector and its viewer: use it instead of them. If another error
 collector is still running (on its own or embedded in another addon), Bugsy reads errors from it

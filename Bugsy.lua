@@ -9,10 +9,12 @@ ns.Bugsy = Bugsy
 _G.Bugsy = Bugsy          -- the one global: the slash command, the compartment, a later library bridge
 
 Bugsy.NOTICE_EVERY = 10   -- seconds between chat notices
--- The alert sound for a new problem (the owner's pick): a FileDataID, played on the
+-- The alert sounds for a new problem (the owner's picks, #19): FileDataIDs, played on the
 -- Master channel. FileDataIDs play on Forever; built-in file paths are refused
--- (References\Docs\PORTING-TBC-TO-FOREVER.md, PlaySoundFile).
-Bugsy.SOUND, Bugsy.SOUND_CHANNEL = 550736, "Master"
+-- (References\Docs\PORTING-TBC-TO-FOREVER.md, PlaySoundFile). The first is the default;
+-- the setting saves the FileDataID, so reordering this list never changes a choice.
+Bugsy.SOUNDS = { 597938, 1859972, 1859973, 1859974, 1859975, 550736 }
+Bugsy.SOUND_CHANNEL = "Master"
 
 local function say(msg)
     local f = G("DEFAULT_CHAT_FRAME")
@@ -23,10 +25,20 @@ local function say(msg)
 end
 Bugsy.say = say
 
-local function alertSound(db)
-    if not db.settings.sound then return end
+-- The chosen sound's place in the list; an unknown saved one falls back to the default.
+local function soundIndex(db)
+    local id = db and db.settings.soundId
+    for i, s in ipairs(Bugsy.SOUNDS) do if s == id then return i end end
+    return 1
+end
+
+local function playSound(db)
     local play = G("PlaySoundFile")
-    if play then pcall(play, Bugsy.SOUND, Bugsy.SOUND_CHANNEL) end
+    if play then pcall(play, Bugsy.SOUNDS[soundIndex(db)], Bugsy.SOUND_CHANNEL) end
+end
+
+local function alertSound(db)
+    if db.settings.sound then playSound(db) end
 end
 
 -- Capture-health lines (#14, #11), each said once per state; the full wording is in
@@ -182,6 +194,7 @@ local HELP = {
     "/bugsy locals on|off - capture local variables with errors (may contain names; off by default)",
     "/bugsy notices on|off - a chat line when a new problem is caught",
     "/bugsy sound on|off - a sound when a new problem is caught",
+    "/bugsy sound 1-6 - choose that sound (plays it); /bugsy sound lists them",
     "/bugsy status - how Bugsy is catching errors",
     "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
 }
@@ -200,9 +213,20 @@ function Bugsy.Slash(msg)
         local on = setting("notices", arg)
         say("chat notices are " .. (on and "on." or "off."))
     elseif cmd == "sound" then
-        local on = setting("sound", arg)
-        say("the sound for a new problem is " .. (on and "on." or "off."))
-        if on and arg == "on" then alertSound(Store.db()) end
+        local db, n = Store.db(), tonumber(arg)
+        if not db then return end
+        if n and Bugsy.SOUNDS[n] then
+            db.settings.soundId, db.settings.sound = Bugsy.SOUNDS[n], true
+            say(("the sound for a new problem is sound %d of %d."):format(n, #Bugsy.SOUNDS))
+            playSound(db)
+        elseif arg == "on" or arg == "off" or arg == "" then
+            local on = setting("sound", arg)
+            say(("the sound for a new problem is %s (sound %d of %d; /bugsy sound 1-%d to choose)."):format(
+                on and "on" or "off", soundIndex(db), #Bugsy.SOUNDS, #Bugsy.SOUNDS))
+            if on and arg == "on" then playSound(db) end
+        else
+            say(("/bugsy sound on|off, or a number from 1 to %d."):format(#Bugsy.SOUNDS))
+        end
     elseif cmd == "front" then
         local on = setting("front", arg)
         say("catching errors ahead of another addon's handler is " .. ((on ~= false) and "on" or "off")
