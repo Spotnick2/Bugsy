@@ -466,3 +466,8 @@ the wrapper's pass-backs). Both procedures: all checks passed.
 - **[game, 70959]** In combat, 15 ms pass-ons 0.05 s apart: suspended on the 7th (`reason =
   "window"`, 105 ms in the window), the 3 after captured and skipped. No hitch, no blocked action
   (owner).
+
+### The alert sounds (#19): build 70959, 2026-11-17
+
+- **[game, 70959]** All six alert sounds play with `PlaySoundFile(id, "Master")`, chosen through
+  `/bugsy sound 1-6` (owner, by ear): 597938, 1859972, 1859973, 1859974, 1859975 and 550736.
