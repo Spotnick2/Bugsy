@@ -170,5 +170,59 @@ Limits of what can be measured:
 
 ## 7. Measured
 
-Nothing yet. Results go here with the build, and addon-agnostic ones in
+Results go here with the build, and addon-agnostic ones in
 `References\Docs\PORTING-TBC-TO-FOREVER.md`.
+
+### `stacks` (P2, P11, P13; P14 in part): build 70959, 2026-11-17
+
+The probe's measuring handler, installed alone, calls `debugstack` directly, so level 1 is the
+handler. `callH` = `GetCallstackHeight()`, `errH` = `GetErrorCallstackHeight()`, both read in the
+handler; "site" = the level where the error's own line is.
+
+| Raise path | callH | errH | Formula `callH - (errH - 1)` | Site | |
+|---|---|---|---|---|---|
+| `error()` in a function | 5 | 2 | 4 | 4 | exact |
+| runtime error | 4 | 2 | 3 | 3 | exact |
+| in `OnUpdate` | 3 | 1 | 3 | 3 | exact |
+| through `securecallfunction` | 7 | 4 | 4 | 4 | exact |
+| in `OnEvent` (fired from a key binding) | 6 | 3 | 4 | 4 | exact |
+| through a chaining wrapper that **tail-calls** the next handler | 4 | 1 | 4 | 5 | one short: level 4 is `[C]: in function 'error'` |
+| `geterrorhandler()(msg)` called directly | 3 | nil | — | 2 (the caller) | fallback |
+| the handler as `xpcall`'s message handler | 6 | nil | — | 3 (2 is `[C]: in function 'error'`) | fallback |
+| an error inside `pcall` | — | — | — | — | the handler is never called |
+
+- **[game, 70959]** **P2: the formula holds** wherever `GetErrorCallstackHeight()` is a number.
+  It is nil for a direct `geterrorhandler()(msg)` call (the library-report case) and for `xpcall`.
+  `GetCallstackHeight` and `debugstack` both count C frames (`[C]: ?`, `[C]: in function 'error'`).
+- **[game, 70959]** A tail-calling wrapper leaves a `[tail call]: ?` frame that `debugstack` counts
+  and `GetCallstackHeight` does not, so the formula lands one level short, on the `'error'` C frame.
+  Harmless for Bugsy: leading C frames are skipped before the signature, so the problem is the same
+  as without the wrapper (test_fixtures). The spelling is `[tail call]`, not Lua 5.1's `(tail call)`.
+- **`FALLBACK_LEVEL = 4` is confirmed.** Bugsy calls `debugstack` from its body, which runs as
+  handler → `pcall` → body: two levels deeper than the probe's handler (the body, and `pcall`'s C
+  frame). A direct call's caller is probe level 2, so Bugsy level 4. For `xpcall`, Bugsy level 4 is
+  the `'error'` C frame and 5 the site; the C frame is skipped. The formula path shifts by the
+  same two levels on both sides (`GetCallstackHeight` is read in the body too).
+- **[game, 70959]** **P11:** a handler set with `seterrorhandler` is returned by
+  `geterrorhandler()` and compares equal (`settable=true`), and restoring the previous one gives it
+  back (`sameAfterRestore=true`). Bugsy's change detection by identity works.
+- **[game, 70959]** **P13:** the frame lines are the measured shape
+  (`[Interface/AddOns/X/f.lua]:158: in function <Interface/AddOns/X/f.lua:158>`), joined by `\n`.
+  A key binding's chunk appears as `[CAMERAORSELECTORMOVE]:4: in function <[string
+  "CAMERAORSELECTORMOVE"]:1>`, which is not a location. The six stacks are fixtures in
+  `tests/test_fixtures.lua`.
+- **P14, in part:** the ten experiments ran 0.1 s apart, so `GetTime()` advanced between records
+  (37489.857 → 37490.669), as expected. Its behaviour *within* one frame (the token buckets'
+  question) needs the `floods` procedure.
+- No Blizzard error window or chat line appeared (owner).
+
+**Found in the owner's setup:** at the start of the run Bugsy was already **displaced** with no
+collector present. An installed addon wraps the error handler after Bugsy loads when no standalone
+collector is running, then passes other errors on by a tail call. Read in its source, the wrapper
+also: converts the message with `tostring` before passing it on; **keeps its own errors** (those
+naming it, outside its libraries) and does not pass them on; and **stops passing anything on**
+after about 1 000 errors that are not its own, more than 10 s after startup. So in this setup
+Bugsy runs in chained mode, cannot see that addon's own errors, and goes blind after a flood. The
+`floods` procedure would trigger that limit: run it with that addon disabled, or as a deliberate
+measurement of the limit. Whether Bugsy should place itself in front of such a wrapper (chaining
+to it, so both still see every error) is an owner decision (DESIGN §3, "never re-takes").

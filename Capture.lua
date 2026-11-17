@@ -23,8 +23,9 @@ Capture.FAILURES_KEPT = 5
 Capture.CHANGES_KEPT = 5
 Capture.DRAIN_RECORDS, Capture.DRAIN_MS = 50, 4
 -- Stack level when GetErrorCallstackHeight() is nil (a direct geterrorhandler()(msg)
--- call, an event). Counted from the body, which runs inside the handler's pcall.
--- Provisional until P2 measures it; reports say "fallback".
+-- call, an event, xpcall). Counted from the body, which runs inside the handler's pcall.
+-- Measured (P2, build 70959, FOREVER-PROBE §7): the caller of a direct call is at 4;
+-- for xpcall, 4 is the 'error' C frame (skipped) and 5 the site. Reports say "fallback".
 Capture.FALLBACK_LEVEL = 4
 -- The other error collector's public names (DESIGN §3, "collector mode"): the
 -- global it publishes and the EventRegistry event it fires for each error.
@@ -497,7 +498,8 @@ function Capture.limits()
         return { "Another addon replaced the error handler, and no error has reached Bugsy since: "
             .. "Bugsy may not see Lua errors this session." }
     elseif S.mode == "chained" then
-        return { "Another addon's error handler passes errors on to Bugsy; stacks may start in its frames." }
+        return { "Another addon's error handler passes errors on to Bugsy; stacks may start in its frames.",
+            "That addon may keep some errors for itself, or stop passing errors on after a flood." }
     end
     return {}
 end
