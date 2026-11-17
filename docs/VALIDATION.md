@@ -3,7 +3,7 @@
 State of the first vertical slice (2026-11-17, build 70959). Two kinds of evidence, never mixed:
 **automated** checks run offline against WowTestKit's mock (pinned commit `38fb0fc`, build data
 70959), and **in-game** checks, which are the only proof of taint, stack levels, secrets and client
-behaviour. In game, `stacks` has run (build 70959, results in FOREVER-PROBE §7); the rest have not.
+behaviour. In game, `stacks`, `secrets` and `combat` have run (build 70959, results in FOREVER-PROBE §7); the rest have not.
 
 ## Automated (`pwsh tests\run.ps1`: 7 files, all passing)
 
@@ -14,7 +14,7 @@ behaviour. In game, `stacks` has run (build 70959, results in FOREVER-PROBE §7)
 | `test_store.lua` | Distinct messages stay distinct; addresses merge; ordinary text untouched; top and full captures agree; frame lines in the **measured Forever shapes** (bracketed first path, named functions, shortened and bare frames, file vs code chunks); one bug from three callers is one problem; our own leading frames never change a signature; first-2/last-3 samples; the 300 cap with 10 000 unique errors; all-muted eviction re-inserting the mute; the previous-session filter ({1,2,4} vs {1,3,4}); count-tier routing; clearing; malformed saved tables; the per-session cap; past 20 call paths, distinct paths counted (not occurrences) with a "more" flag; a kept problem with damaged nested fields (call paths, sessions, addons, samples, attribution) rebuilt so the window, a repeat and a report still work | 82 |
 | `test_collector.lua` | A stand-in modelled on the common error collector's source: a previous session's counter counts nothing at seed; a current one counts "at least one"; live repeats count exactly once; evidence copied, not referenced; a reset re-seeds; our event frame owns warnings and actions (a French copy skipped too); a new live error is exact; locals follow Bugsy's setting; a copy embedded in another addon taking over after native capture, with backfill; an unusable collector global ignored; Capture and the stub naming the same collector API | 39 |
 | `test_report.lua` | JSON parsed by a strict RFC 8259 parser; control characters, `|` and invalid UTF-8; the player's name and realm replaced in values **and keys** (collision suffix); trimming a far-oversized report under 64 KB in the documented order; the minimal report when nothing else fits; a manual report; **no string in the addon claims a report was sent or submitted**; `docs/examples/` current; empty schema lists encoded as `[]`, maps as `{}`; each Markdown occurrence names the versions it was captured with, the installed ones labelled apart (an upgrade after capture) | 967 |
-| `test_fixtures.lua` | The real stacks from `stacks` (P13): each one's first location, attribution to the probe alone, a key-binding chunk and C frames not locations, the measured `[tail call]` spelling, and one problem whether an error arrives directly or through a tail-calling wrapper | 24 |
+| `test_fixtures.lua` | The real stacks from `stacks` (P13): each one's first location, attribution to the probe alone, a key-binding chunk and C frames not locations, the measured `[tail call]` spelling, and one problem whether an error arrives directly or through a tail-calling wrapper; the real `secrets` messages (secret-boolean wording, the aura error) matched by their patterns and attribution, the aura title without its `Lua Taint:` line, `UNKNOWN ERROR` grouped per location | 31 |
 | `test_ui.lua` | Notices held in combat and sent after; a problem's first occurrence in a new session announced again, not twice in one session; `|` escaped in the list and details; mute, copy guidance, clear all with confirmation, filters, the empty list, the status line; the report flow (answers, preview, destination, JSON, copy guidance), Report a problem; every widget method called exists in build 70959 (`Kit.checkMethods`) | 87 |
 
 **Mutation checks** (each behaviour broken on purpose, a test went red): the recursion guard, the
@@ -35,8 +35,8 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | Procedure | Answers | Release gate |
 |---|---|---|
 | `stacks` | **Done, 70959: passed.** P2 formula exact where `GetErrorCallstackHeight` is set, fallback 4 confirmed, a tail-calling wrapper harmless; P11 identity works; P13 fixtures in `test_fixtures`. P14 within a frame left to `floods` | yes |
-| `secrets` | P1: secret message, stack, locals in combat | yes |
-| `combat` | P6: an error in combat, a timer scheduled from the handler | yes |
+| `secrets` | **Done, 70959.** P1: three tainted errors in combat; message, stack and locals all readable, the two checks agree; new secret-boolean wording matched; a table error arrives as `UNKNOWN ERROR`. A secret *message* was not produced: those markers stay unmeasured | yes |
+| `combat` | **Done, 70959.** P6: the handler in combat writes its tables and its timer runs; no blocked action. taintLog was off: taint lines are left to `frontown` | yes |
 | `early` | P5: errors during loading, `LoadSavedVariablesFirst`, a timer during load | yes |
 | `floods` | P8: 1 000 identical and 1 000 unique errors. Run it with any addon that wraps the error handler disabled (one stops passing errors on after a flood, §7), unless measuring that | yes |
 | `throw` | P9: a handler that throws | yes |

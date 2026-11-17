@@ -226,3 +226,41 @@ Bugsy runs in chained mode, cannot see that addon's own errors, and goes blind a
 `floods` procedure would trigger that limit: run it with that addon disabled, or as a deliberate
 measurement of the limit. Whether Bugsy should place itself in front of such a wrapper (chaining
 to it, so both still see every error) is an owner decision (DESIGN §3, "never re-takes").
+
+### `secrets` (P1): build 70959, 2026-11-17
+
+Three errors raised by tainted code (the probe) in combat, inside a player `UNIT_AURA` handler,
+each reaching the probe's measuring handler alone. Blizzard showed nothing (owner).
+
+| Experiment | Message | Stack | Locals |
+|---|---|---|---|
+| truth test on a field of the `UNIT_AURA` payload | readable: `...:233: attempt to perform boolean test on local 'x' (a secret boolean value, while execution tainted by 'BugsyProbe')` | readable | readable (828 bytes) |
+| `error(payload)`, a table from the payload as the message | readable: the string `UNKNOWN ERROR` | readable | readable |
+| `C_UnitAuras.GetAuraDataByIndex("player", 1)` | readable: `GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'BugsyProbe'` then a second line `Lua Taint: BugsyProbe` | readable | readable |
+
+- **[game, 70959]** In all three, `issecretvalue` was false and `canaccessvalue` true for the
+  message, the stack and the locals: they agree. **No secret message, stack or locals reached the
+  handler** in these cases. The payload table itself was neither secret nor inaccessible; its
+  field was a secret boolean.
+- **[game, 70959]** The secret-boolean message has a new wording, `(a secret boolean value, while
+  execution tainted by 'X')`. The `secret-touch` pattern and the "tainted by" attribution match it
+  (test_fixtures).
+- **[game, 70959]** An error whose value is a (payload) table arrives as the string `UNKNOWN
+  ERROR`, not as the table: such errors group by their first location, one problem per place.
+  Whether a plain, non-secret table also becomes `UNKNOWN ERROR` is not measured.
+- **[game, 70959]** The aura error's second line, `Lua Taint: <addon>`, stays out of the title
+  (the first line).
+- **Still open (P1):** an error whose message *is* a secret (Blizzard's source guards for it)
+  was not produced; Bugsy's markers for it remain defensive and unmeasured. Locals of code that
+  touched combat data were readable here; whether `debuglocals` prints secret values inside them
+  (and how) is not visible from the saved head.
+
+### `combat` (P6): build 70959, 2026-11-17
+
+- **[game, 70959]** An error raised by a timer in combat reached the probe's measuring handler
+  (`InCombatLockdown()` true). The handler wrote its tables and scheduled a `C_Timer.After` from
+  inside itself; that timer ran (1 of 1). No `ADDON_ACTION_BLOCKED` appeared afterwards (owner).
+  So writing tables and scheduling the drain from the handler in combat is clean.
+- **Not covered:** `taintLog` was off, so taint lines from the handler were not looked for. The
+  front design's `frontown` procedure runs with `taintLog` on and covers that (and installing a
+  handler in combat).
