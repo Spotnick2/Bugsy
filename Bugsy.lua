@@ -58,6 +58,8 @@ boot:SetScript("OnEvent", function(_, event, name)
             local db = Store.adopt(rawget(_G, "BugsyDB"))
             _G.BugsyDB = db
             Capture.state.settings = db.settings
+            -- read once a session (Codex, front design): /bugsy front changes the next session
+            Capture.state.frontEnabled = db.settings.front ~= false
             Capture.sink = { record = Store.record, count = Store.count }
             Capture.schedule()
         else
@@ -77,16 +79,41 @@ function Bugsy.Status()
     local S = Capture.state
     local mode = ({ native = "catching errors itself", collector = "reading from another error collector",
         displaced = "unsure: another addon replaced the error handler and no error has reached Bugsy since",
-        chained = "receiving errors through another addon's handler" })[S.mode] or S.mode
+        chained = "receiving errors through another addon's handler",
+        front = "catching errors ahead of another addon's handler, and passing them on to it" })[S.mode] or S.mode
     local queued, counts = Capture.pending()
     local lost = 0
     for _, n in pairs(S.stats.suppressed) do lost = lost + n end
     return mode, lost + S.stats.queueDropped, S.failures, queued + counts
 end
 
--- For BugsyProbe: the raw capture mode and whether the other collector's API is present.
-function Bugsy.Diagnostics()
-    return { mode = Capture.state.mode, collector = Capture.collectorUsable() ~= nil }
+-- For BugsyProbe: the raw capture mode, whether the other collector's API is present,
+-- the front handler's state and counters, and (with `match`) the problems whose title
+-- contains that text: how many occurrences, and the newest sample's first location,
+-- tier, entry and whether it has locals.
+function Bugsy.Diagnostics(match)
+    local S = Capture.state
+    local d = { mode = S.mode, collector = Capture.collectorUsable() ~= nil, frontTried = S.frontTried,
+        frontEnabled = S.frontEnabled, fronted = G("geterrorhandler") and G("geterrorhandler")() == Capture.front,
+        passSuppressed = S.stats.passSuppressed, forwardFailed = S.stats.forwardFailed,
+        nativeInCollector = S.stats.nativeInCollector, failures = S.failures }
+    if type(match) == "string" and match ~= "" then
+        local count, newest = 0, nil
+        for _, p in ipairs(Store.List("all", true)) do
+            if p.title:find(match, 1, true) then
+                count = count + p.count
+                local s = p.last[#p.last] or p.first[#p.first]
+                if s and (not newest or (s.at or 0) >= (newest.at or 0)) then newest = s end
+            end
+        end
+        d.count = count
+        if newest then
+            d.where = ns.Signature.where(ns.Signature.lines(type(newest.stack) == "string" and newest.stack or nil))
+            d.tier, d.entry = newest.tier, newest.entry
+            d.hasLocals = type(newest.locals) == "string" or (type(newest.locals) == "table" and newest.locals.text ~= nil)
+        end
+    end
+    return d
 end
 
 local function setting(key, arg)
@@ -102,6 +129,7 @@ local HELP = {
     "/bugsy locals on|off - capture local variables with errors (may contain names; off by default)",
     "/bugsy notices on|off - a chat line when a new problem is caught",
     "/bugsy status - how Bugsy is catching errors",
+    "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
 }
 
 function Bugsy.Slash(msg)
@@ -117,10 +145,15 @@ function Bugsy.Slash(msg)
     elseif cmd == "notices" then
         local on = setting("notices", arg)
         say("chat notices are " .. (on and "on." or "off."))
+    elseif cmd == "front" then
+        local on = setting("front", arg)
+        say("catching errors ahead of another addon's handler is " .. ((on ~= false) and "on" or "off")
+            .. (((arg == "on" or arg == "off") and " from the next session (/reload).") or "."))
     elseif cmd == "status" then
         local mode, lost, failures, pending = Bugsy.Status()
         say(mode .. "; " .. lost .. " not fully captured this session; " .. failures
             .. " internal failures; " .. pending .. " waiting.")
+        for _, l in ipairs(Capture.limits()) do say(l) end
     else
         for _, line in ipairs(HELP) do say(line) end
     end

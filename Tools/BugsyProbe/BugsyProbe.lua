@@ -404,6 +404,100 @@ end
 
 -- Commands ------------------------------------------------------------------------------
 
+-- Front mode (DESIGN §3, D14; P7): Bugsy installed ahead of another addon's handler.
+-- Read through Bugsy.Diagnostics; the probe's own wrapper (frontown) records what a
+-- downstream handler sees.
+local function diag(match)
+    local B = G("Bugsy")
+    return (B and B.Diagnostics and B.Diagnostics(match)) or {}
+end
+
+local function frontLog(label, t)
+    BugsyProbeDB.front = BugsyProbeDB.front or {}
+    t.at, t.inCombat = GetTime(), InCombatLockdown()
+    BugsyProbeDB.front[label] = t
+    return t
+end
+
+local function frontState(label)
+    local d = diag()
+    frontLog(label, { mode = d.mode, fronted = d.fronted, frontTried = d.frontTried, frontEnabled = d.frontEnabled,
+        handler = tostring(geterrorhandler()), passSuppressed = d.passSuppressed, forwardFailed = d.forwardFailed })
+    say(("front[%s]: mode=%s fronted=%s tried=%s enabled=%s passSuppressed=%s forwardFailed=%s combat=%s"):format(label,
+        tostring(d.mode), tostring(d.fronted), tostring(d.frontTried), tostring(d.frontEnabled),
+        tostring(d.passSuppressed), tostring(d.forwardFailed), tostring(InCombatLockdown())))
+    return d
+end
+
+-- What Bugsy recorded for problems whose title contains `match`.
+local function recorded(match, label)
+    local d = diag(match)
+    frontLog(label, { match = match, count = d.count, where = d.where, tier = d.tier, entry = d.entry,
+        hasLocals = d.hasLocals, mode = d.mode })
+    say(("front[%s]: %q count=%s where=%s tier=%s entry=%s locals=%s"):format(label, match, tostring(d.count),
+        tostring(d.where), tostring(d.tier), tostring(d.entry), tostring(d.hasLocals)))
+    return d
+end
+
+local function raiseLater(text, delay)
+    C_Timer.After(delay or 0.05, function() error(text) end)
+end
+
+local function waitRecorded(match)
+    return function()
+        local d = diag(match)
+        return (d.count or 0) > 0, "not recorded yet: " .. match
+    end
+end
+
+local function located(d)
+    return d.where ~= nil and d.where:find("BugsyProbe/BugsyProbe.lua", 1, true) ~= nil
+end
+
+-- The probe's own chaining wrapper, for frontown. For every call it records the
+-- error height, the call height, and the first stack lines at the formula's level
+-- (debugstack called directly, as Blizzard's handler does).
+local PW = { calls = {}, prev = nil, recurse = false, throw = false }
+NS.PW = PW
+local function probeWrapper(msg, ...)
+    local eh = GetErrorCallstackHeight and GetErrorCallstackHeight()
+    local ch = GetCallstackHeight and GetCallstackHeight()
+    local e = { msg = type(msg) == "string" and msg:sub(1, 160) or type(msg), errH = eh, callH = ch,
+        inCombat = InCombatLockdown(), at = GetTime() }
+    if type(eh) == "number" and type(ch) == "number" then
+        e.level = ch - (eh - 1)
+        e.stack = debugstack(e.level, 3, 0)
+    else
+        e.stack = debugstack(2, 3, 0)
+    end
+    local list = PW.calls
+    list[#list + 1] = e
+    if #list > 60 then table.remove(list, 1) end
+    BugsyProbeDB.frontWrapper = list
+    if type(msg) == "string" then
+        if PW.recurse and msg:find("BugsyProbe frontown outer", 1, true) then
+            PW.recurse = false
+            geterrorhandler()("BugsyProbe frontown inner (reported while handling)")
+        end
+        if PW.throw and msg:find("BugsyProbe frontown throw", 1, true) then
+            PW.throw = false
+            error("BugsyProbe wrapper exploded")
+        end
+    end
+    if PW.prev then return PW.prev(msg, ...) end
+end
+
+local W2 = { calls = 0 }
+local function laterWrapper(msg, ...)
+    W2.calls = W2.calls + 1
+    if W2.prev then return W2.prev(msg, ...) end
+end
+
+Probe:Command("keyword", function(args)
+    BugsyProbeDB.keyword = (args and args ~= "") and args or nil
+    say("keyword: " .. tostring(BugsyProbeDB.keyword))
+end, "the word the wrapper addon's own-error filter looks for (its name), for the front procedure")
+
 Probe:Command("state", function() handlerState("now") end, "who holds the error handler, can it be set")
 Probe:Command("stacks", function() local ok, d = runAll(); say(d) end, "run the stack-level experiments (P2)")
 Probe:Command("results", function(args)
@@ -533,6 +627,110 @@ Probe:Steps("copy", {
 -- Boot --------------------------------------------------------------------------------------
 
 local boot = CreateFrame("Frame")
+Probe:Steps("front", {
+    title = "Bugsy ahead of an installed wrapper (P7, front)", rev = 1,
+    { text = "Needs: the addon that installs its own error handler enabled, no standalone error collector, /bugsy front on, a fresh /reload. Press Run to record who holds the handler.",
+      run = function() local d = frontState("front-start"); return d.fronted == true, tostring(d.mode) end,
+      check = function() local s = BugsyProbeDB.front["front-start"]; return s and s.fronted == true, "Bugsy is in front" end },
+    { text = "Press Run: an ordinary error.", run = function() raiseLater("BugsyProbe front ordinary"); return true end },
+    { text = "Waiting for Bugsy to record it.", wait = waitRecorded("BugsyProbe front ordinary"), timeout = 15,
+      check = function() local d = recorded("BugsyProbe front ordinary", "ordinary"); return located(d), tostring(d.where) end },
+    { text = "Type /fp bugsy keyword <that addon's name> (its own-error filter looks for it), then press Run: an error naming it. That addon keeps such errors for itself and may show its own popup.",
+      run = function()
+          if not BugsyProbeDB.keyword then return false, "set the keyword first" end
+          raiseLater("BugsyProbe front own " .. BugsyProbeDB.keyword:lower())
+          return true end },
+    { text = "Waiting for Bugsy to record it.", wait = waitRecorded("BugsyProbe front own"), timeout = 15,
+      check = function() local d = recorded("BugsyProbe front own", "own"); return (d.count or 0) > 0, "recorded by Bugsy" end },
+    { text = "Type /bugsy locals on, then press Run: an error with locals (turn them off later with /bugsy locals off).",
+      run = function() raiseLater("BugsyProbe front locals"); return true end },
+    { text = "Waiting.", wait = waitRecorded("BugsyProbe front locals"), timeout = 15,
+      check = function() local d = recorded("BugsyProbe front locals", "locals"); return d.hasLocals == true, "locals kept" end },
+    { text = "Press Run: a direct report (geterrorhandler()(msg), no error in flight).",
+      run = function() geterrorhandler()("BugsyProbe front direct report"); return true end },
+    { text = "Waiting.", wait = waitRecorded("BugsyProbe front direct report"), timeout = 15,
+      check = function() local d = recorded("BugsyProbe front direct report", "direct"); return located(d), tostring(d.where) end },
+    { text = "At least 10 s after login, press Run: 1100 errors over about 2 s (past that addon's cutoff), then a marker error.",
+      run = function()
+          for i = 1, 1100 do C_Timer.After(i * 0.002, function() error("BugsyProbe front flood") end) end
+          raiseLater("BugsyProbe front marker after the flood", 4)
+          return true, "scheduled" end },
+    { text = "Waiting for the marker.", wait = waitRecorded("BugsyProbe front marker after the flood"), timeout = 30,
+      check = function()
+          recorded("BugsyProbe front flood", "flood")
+          local d = recorded("BugsyProbe front marker after the flood", "marker")
+          frontState("front-end")
+          return (d.count or 0) > 0, "marker recorded, tier " .. tostring(d.tier) end },
+    { text = "Did that addon show anything (a popup or a chat line) during this procedure?", ask = true },
+})
+
+Probe:Steps("frontown", {
+    title = "Bugsy installing itself ahead of a wrapper in combat (P6, P7, frontown)", rev = 1,
+    { text = "Needs: the addon that installs its own error handler DISABLED, no error collector, /bugsy front on, /console taintLog 1, then a fresh /reload. Press Run to check.",
+      run = function() local d = frontState("own-start"); return d.mode == "native" and not d.frontTried, tostring(d.mode) end,
+      check = function() local s = BugsyProbeDB.front["own-start"]
+          return s and s.mode == "native" and not s.frontTried, "native, no attempt yet" end },
+    { text = "Start a fight. In combat, press Run: the probe installs its own wrapper and raises an error; Bugsy should put itself in front, in combat.",
+      run = function()
+          if not InCombatLockdown() then return false, "not in combat yet" end
+          PW.prev = geterrorhandler()
+          seterrorhandler(probeWrapper)
+          raiseLater("BugsyProbe frontown first")
+          return true, "wrapper installed" end },
+    { text = "Waiting for Bugsy to install itself.", wait = function() return diag().fronted == true, "not in front yet" end, timeout = 20,
+      check = function() local d = frontState("own-installed")
+          return d.fronted == true and InCombatLockdown(), "in front, in combat=" .. tostring(InCombatLockdown()) end },
+    { text = "Still in combat, press Run: a real error and a direct report.",
+      run = function()
+          raiseLater("BugsyProbe frontown real")
+          C_Timer.After(0.1, function() geterrorhandler()("BugsyProbe frontown direct") end)
+          return true end },
+    { text = "Waiting.", wait = function()
+          local a, b = diag("BugsyProbe frontown real"), diag("BugsyProbe frontown direct")
+          return (a.count or 0) > 0 and (b.count or 0) > 0, "not both recorded yet" end, timeout = 15,
+      check = function()
+          local a = recorded("BugsyProbe frontown real", "own-real")
+          recorded("BugsyProbe frontown direct", "own-direct")
+          return located(a), tostring(a.where) end },
+    { text = "Press Run: an error the probe's wrapper reports again while handling it.",
+      run = function() PW.recurse = true; frontState("own-before-recurse"); raiseLater("BugsyProbe frontown outer"); return true end },
+    { text = "Waiting.", wait = waitRecorded("BugsyProbe frontown outer"), timeout = 15,
+      check = function()
+          local before = BugsyProbeDB.front["own-before-recurse"]
+          local d = frontState("own-after-recurse")
+          local inner = recorded("BugsyProbe frontown inner", "own-inner")
+          return (inner.count or 0) == 0 and (d.passSuppressed or 0) >= (before.passSuppressed or 0) + 2,
+              "inner dropped; passSuppressed " .. tostring(before.passSuppressed) .. " -> " .. tostring(d.passSuppressed) end },
+    { text = "Press Run: an error during which the probe's wrapper throws, then another error.",
+      run = function()
+          PW.throw = true
+          frontState("own-before-throw")
+          raiseLater("BugsyProbe frontown throw")
+          raiseLater("BugsyProbe frontown after the throw", 0.4)
+          return true end },
+    { text = "Waiting.", wait = waitRecorded("BugsyProbe frontown after the throw"), timeout = 15,
+      check = function()
+          local before = BugsyProbeDB.front["own-before-throw"]
+          local d = frontState("own-after-throw")
+          return (d.forwardFailed or 0) > (before.forwardFailed or 0), "forwardFailed counted, next error recorded" end },
+    { text = "Press Run: a later wrapper is installed ahead of Bugsy, then an error.",
+      run = function()
+          W2.prev = geterrorhandler()
+          seterrorhandler(laterWrapper)
+          raiseLater("BugsyProbe frontown later wrapper")
+          return true end },
+    { text = "Waiting.", wait = waitRecorded("BugsyProbe frontown later wrapper"), timeout = 15,
+      check = function()
+          local d = recorded("BugsyProbe frontown later wrapper", "own-w2")
+          local s = frontState("own-end")
+          BugsyProbeDB.front["own-w2"].w2calls = W2.calls
+          return d.count == 1 and W2.calls > 0 and geterrorhandler() == laterWrapper,
+              ("once=%s w2=%d no second front=%s mode=%s"):format(tostring(d.count == 1), W2.calls,
+                  tostring(geterrorhandler() == laterWrapper), tostring(s.mode)) end },
+    { text = "Leave combat. Did anything show a blocked action or an \"interface action failed\" message?", ask = true },
+    { text = "Reload to write the taint log and save the results (the probe's wrappers go away).", reload = true },
+})
+
 Probe:RegisterEvents(boot, { "ADDON_LOADED" })
 boot:SetScript("OnEvent", function(_, _, name)
     if name ~= ADDON then return end

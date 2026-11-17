@@ -76,7 +76,7 @@ end
 
 local function cleanSample(s)
     if type(s) ~= "table" then return nil end
-    for _, k in ipairs({ "provider", "tier", "stackOrigin", "exactSignature" }) do
+    for _, k in ipairs({ "provider", "tier", "stackOrigin", "exactSignature", "entry" }) do
         if not optStr(s[k], 64) then s[k] = nil end
     end
     if s.build ~= nil and type(s.build) ~= "number" and not isStr(s.build, 16) then s.build = nil end
@@ -168,6 +168,7 @@ function Store.adopt(saved)
     if type(saved.settings) ~= "table" then saved.settings = {} end
     saved.settings.locals = saved.settings.locals == true
     saved.settings.notices = saved.settings.notices ~= false
+    saved.settings.front = saved.settings.front ~= false
 
     local problems = type(saved.problems) == "table" and saved.problems or {}
     local kept, n = {}, 0
@@ -381,7 +382,7 @@ function Store.record(rec)
     p.attribution = attr                    -- the latest reading; samples keep the evidence
 
     local occ = { at = at, atApproximate = rec.atApproximate, uptime = rec.uptime, session = session,
-        build = Context.client().build, provider = rec.provider, tier = rec.tier,
+        build = Context.client().build, provider = rec.provider, tier = rec.tier, entry = rec.entry,
         stackOrigin = rec.stackOrigin, observedAt = rec.observedAt or now,
         inCombat = rec.inCombat, instanceType = rec.instanceType, taintLog = rec.taintLog,
         message = rec.message, stack = rec.stack, locals = rec.locals, exactSignature = exact,

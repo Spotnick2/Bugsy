@@ -40,7 +40,7 @@ Mute, Clear, a locals setting, the status line, quiet notices. *Accept:* builds 
 in combat, every string escaped for display; in game, a screenshot procedure.
 
 **B-6 Collector mode.** Detection, API check, backfill with watermarks, event ownership switch,
-limits in the status line. *Accept:* unit tests with a collector stand-in: register-then-
+limits printed by `/bugsy status`. *Accept:* unit tests with a collector stand-in: register-then-
 reconcile with repeats never double-counts; an object carrying yesterday's counter counts one and
 marks `countIncomplete`; a reset counter re-seeds; warnings not backfilled; evidence copied, not
 referenced; backfilled occurrences carry markers, live ones real values. In game (P7): with
