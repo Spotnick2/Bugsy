@@ -52,8 +52,8 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | `throw` | **Done, 70959.** P9: a throwing handler becomes a Lua Warning (Blizzard's window, `LUA_WARNING`); no recursion; capture continues | yes |
 | `front` | **Done, 70959: passed.** P7: Bugsy in front of the installed wrapper records its kept errors, locals and a direct report, and keeps capturing after the wrapper's measured cutoff (1 000) | yes |
 | `frontown` | **Done, 70959: passed.** P6, P7: front installed in combat, no taint or blocked action; downstream formula levels hold; a report while passing dropped and counted; a throwing wrapper counted; a later wrapper keeps the chain | yes |
-| `pause` | #14: bursts of 99 (twice), 100 and 101 in one frame, each with a marker after; deliveries counted on both sides; blocked actions after the pause | for D16 |
-| `frontslow` | #11: a finite-cost wrapper behind Bugsy: under both thresholds, one slow call trips, then (after a reload, in combat) the rolling window trips | for D16 |
+| `pause` | **Done, 70959.** #14: the client pauses at the 100th error in one frame (99 twice does not); its notice is not sent at 100 or 101; Bugsy's suspicion at exactly 100; events still captured | for D16 |
+| `frontslow` | **Done, 70959.** #11: under the thresholds nothing trips; one 60 ms pass-on trips; in combat the window trips at 105 ms; capture continues | for D16 |
 | `coexist` | **Done, 70959.** P7: with the collector, collector mode and errors through it; without it, the embedding addon wraps the handler and Bugsy goes front | yes |
 | `popups` | **Done, 70959.** P4: the forbidden function is named (`TargetUnit()`); P10: with Blizzard's listeners unregistered, no popup. Taint of doing so not yet checked (B-18) | owner's decision |
 | `copy` | **Done, 70959.** P12: Bugsy's doubled-pipe display copies back to the original exactly (`|`, colour codes, UTF-8); raw text copies what is rendered; 63 KB identical. A tab's fate is unknown | Copy details part |
