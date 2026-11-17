@@ -1,0 +1,174 @@
+# What Bugsy relies on: verified, measured, and still open
+
+Bugsy is built on how the Forever client hands errors to addons. Every claim here is one of three
+kinds, and is labelled:
+
+- **[source]** read in code: Blizzard's UI source (`C:\Projects\WoW\wow-ui-source`, branch `forever`,
+  build **70938**), the API dump (`References\Forever\api\forever-api-1.60.1.70959.md`, the newest), or
+  the reference addons (other error collectors and viewers, read for their behaviour only; no code
+  copied).
+- **[game]** measured in game, with the build.
+- **[open]** an assumption that needs a probe (BugsyProbe, `/fp bugsy`) before anything depends on it.
+
+The UI source clone is 70938 and the newest dump is 70959. The dump lines for the functions and
+events below (`GetErrorCallstackHeight`, `GetCallstackHeight`, `debugstack`, `debuglocals`,
+`seterrorhandler`, `issecretvalue`, `canaccessvalue`, `LUA_WARNING`, `ADDON_ACTION_BLOCKED`) are
+identical in 70938 and 70959. That is checked again when the probe runs.
+
+## 1. Blizzard's own handler
+
+- **[source]** `Blizzard_ScriptErrors.lua` calls `seterrorhandler(HandleLuaError)` at its load. The
+  handler gets the stack with `debugstack(GetCallstackHeight() - (GetErrorCallstackHeight() - 1))`,
+  and locals with `debuglocals(level, true)` (functions and userdata skipped).
+- **[source]** `AddLuaErrorHandler(fn)` asserts `issecure()`. Addons cannot join Blizzard's list of
+  handlers. Blizzard's frame (`ScriptErrorsFrame`) registers through it. An addon that wants errors
+  replaces the handler with `seterrorhandler`, as the common error collector does. This is a constraint on *how* to
+  capture, not by itself an argument for replacing the handler: the provider decision (DESIGN §3)
+  rests on the coexistence facts below too.
+- **[source]** Blizzard logs the formatted message only when `canaccessvalue(formattedMessage)`.
+  Tainted code can throw a message that is a secret value.
+- **[source]** `ScriptErrorsFrameMixin:DisplayMessageInternal` turns off duplicate matching when
+  the message key `issecretvalue`. Their comment: a secret key either throws in tainted code, or,
+  from untainted code, leaves the `seen` table forbidden so no tainted code can report an error
+  through it again. **Any table keyed by error text must check the key first.**
+- **[source]** The secret API in the dump: `issecretvalue`, `issecrettable`, `canaccessvalue`,
+  `canaccesstable`, `canaccessallvalues`, `canaccesssecrets`, `scrub`, `scrubsecretvalues`,
+  `secretwrap`. All `[FrameScript]`. Also `C_StringUtil.EscapeDecimalNonPrintables`,
+  `GetErrorCallstackHeight() -> optional number`, `GetCallstackHeight()`.
+- **[source]** `ScriptErrorsFrame` registers `LUA_WARNING` itself.
+- **[open]** Whether `issecretvalue` alone is the right test for "can I read this", or
+  `canaccessvalue` is needed (they differ: a value can be non-secret yet inaccessible?). Probe P1.
+
+## 2. The common error collector (what it does on Forever)
+
+"The collector" below is the most widely used error-collecting addon; "its viewer" is the addon
+that displays what it collects. Bugsy reads the collector's public API in collector mode
+(`Capture.COLLECTOR`: its global and its per-error event).
+
+- **[source]** TOC Interface includes `16001`; `LoadSavedVariablesFirst: 1`. Owner has run it on
+  Forever since beta day one **[game, owner]**.
+- **[source]** Secret handling exists: a secret message (after `tostring`) is **printed to chat and
+  not stored**; a secret stack is replaced by `"debugstack() returned secrets."`, secret locals by
+  `"debuglocals() returned secrets."`. Checks use `issecretvalue` only.
+- **[source]** Stack depth: Blizzard's formula, and `debugstack(3)` when `GetErrorCallstackHeight()`
+  is nil.
+- **[source]** Grouping: exact message string, found by a linear scan from the newest of up to
+  500 entries. Stack and locals of a repeat are refreshed only on a new
+  session or after 120 s.
+- **[source]** Flood: a token bucket of `10` errors a second. Past it, **every** error is dropped
+  until the bucket refills, with a chat warning every 10 s. Nothing counts what was dropped.
+- **[source]** Locals: `debuglocals(level)` (functions and userdata *included*), always captured,
+  no size cap.
+- **[source]** `ADDON_ACTION_BLOCKED` / `ADDON_ACTION_FORBIDDEN`: recorded **once per addon name per
+  session** (later ones, other functions included, are dropped). It unregisters them from
+  `UIParent` and `GameEvent` (Blizzard's "interface action failed" popup), and `LUA_WARNING` from
+  `ScriptErrorsFrame`. `LUA_WARNING` is stored as a "simple" error, without a stack. Its copies of
+  warnings and actions start with `LUA_WARNING: ` and `[ADDON_ACTION_` in every locale.
+- **[source]** It then calls the real `seterrorhandler` with its own handler and replaces the global
+  `seterrorhandler` with a no-op. **After the collector loads, nobody else can install a handler.**
+- **[source]** Embedding: other addons may embed a copy of the collector. The copy runs unless the
+  standalone collector is enabled, and bails if the collector's global exists (a read-only proxy).
+  **At least one popular Forever addon embeds it**, so removing the standalone collector can leave
+  that addon's copy taking the handler, later in the load than a `!`-named addon.
+- **[source]** Public surface others use: a per-error `EventRegistry` event (`tableID`) and a
+  display-registered one; `GetErrorByID`, `GetDB`, `GetSessionId`, `IsPaused`, `StoreError`,
+  `Reset`, `GetChatLink`; a TOC metadata field for displays. Several addons among the references
+  consume it.
+- **[source]** Error object: `{ message, stack, locals, session, time, counter }`; `counter` grows
+  across sessions.
+
+## 3. Its viewer
+
+- **[source]** A display only: everything comes from the collector. Shows one error at a time with
+  Next/Previous, session tabs, a text filter, sound and an optional chat line. It escapes
+  non-printables (`C_StringUtil.EscapeDecimalNonPrintables`) and colours the stack.
+- **[source]** No grouping beyond the collector's, no attribution, no context, no report flow. It can
+  send bugs to another player over addon comms (Bugsy does not: privacy, and not a support
+  channel).
+
+## 4. Other handlers in the wild
+
+- **[source]** Ace3 (and many libraries) report errors they caught with `geterrorhandler()(err)`:
+  AceAddon, AceGUI, AceConfigDialog, AceBucket, CallbackHandler. These reach the global handler
+  **without a real Lua error in progress**, so `GetErrorCallstackHeight()` is likely nil there
+  **[open, P2]**.
+- **[source]** Some UI suites and large addons wrap the previous handler and call it after their
+  own (Bugsy's "chained" mode); one has its own error handling and listens to the collector when
+  present.
+
+## 5. Facts from the porting guide that shape attribution and explanations
+
+- **[game, 69913]** `ADDON_ACTION_BLOCKED` is blamed on whichever addon's taint the call path
+  carries; the addon at fault may appear only in the stack.
+- **[game, 69977]** `ADDON_ACTION_FORBIDDEN` from `TargetUnit(name, true)` arrives as
+  `(addonName, "UNKNOWN()")`.
+- **[game, 70450]** With `/console taintLog 1`, Blizzard code calls nil methods on methods addons
+  hooked. Those errors come from the logging. Bugsy labels them as suspected noise; it never hides
+  them.
+- **[game]** Secret values throw when compared or truth-tested, with messages such as
+  *"attempt to perform boolean test on field 'x' (a secret boolean value)"* and
+  *"attempt to perform arithmetic on a secret number value (execution tainted by 'X')"*.
+- **[game]** `C_UnitAuras.GetAuraDataByIndex` in combat raises *"Auras cannot be accessed when
+  secret while tainted by '<addon>'"*.
+
+## 6. Open questions for BugsyProbe
+
+Each becomes a `Probe:Steps` procedure or command. None of Bugsy's behaviour that depends on one
+ships as "verified" until it is measured.
+
+| # | Question | Why it matters |
+|---|---|---|
+| P1 | For an error from tainted code that touched a secret: are the message, `debugstack()` and `debuglocals()` each accessible, secret, or inaccessible? Do `issecretvalue` and `canaccessvalue` agree? | Which fields Bugsy can keep; the opaque bucket |
+| P2 | `GetErrorCallstackHeight()` for: a plain `error()`, a runtime error, `geterrorhandler()(msg)` called directly, an error inside `pcall`/`xpcall` with our handler, an error in a `C_Timer` callback and an `OnEvent` script | The stack level formula and its fallback |
+| P3 | `LUA_WARNING` payloads and frequency over a normal session | Whether to keep them in the main list |
+| P4 | `ADDON_ACTION_BLOCKED` / `FORBIDDEN` payloads for common calls (a protected frame `Hide` in combat, `TargetUnit`, `SetRaidTarget`); does `function` ever carry more than `UNKNOWN()`? | Attribution of blocked actions |
+| P5 | Errors before our `ADDON_LOADED`: from an addon loaded before `!Bugsy`, from our own files, from a later addon's file scope. Is `LoadSavedVariablesFirst` honoured on Forever (our SV readable at file scope)? | Early capture |
+| P6 | Combat lockdown: does running our handler, writing our tables and scheduling `C_Timer.After(0)` from it raise any blocked action or taint line? | The critical path must be clean |
+| P7 | Coexistence: the standalone collector loaded; only an embedded copy; neither. Which handler wins, when, and does the collector's per-error event reach us in each case? | Provider switching |
+| P8 | Flood: 1 000 identical errors in one frame, and 1 000 unique ones. Frame time, memory, what survives | Budgets |
+| P9 | An error inside our own handler (forced): does the client recurse, swallow, or fall back to Blizzard? | The recursion guard |
+| P10 | Does unregistering `ADDON_ACTION_*` from `UIParent`/`GameEvent` and `LUA_WARNING` from `ScriptErrorsFrame` taint anything on Forever? | Whether Bugsy suppresses Blizzard's popups as the collector does |
+| P11 | `geterrorhandler()` identity: after we install, does it return our function, and can we tell when someone replaced it? | Detecting a takeover |
+| P12 | Clipboard and EditBox: does Ctrl+C from a read-only multi-line EditBox give back `\|` sequences, tabs, UTF-8 and a 60 KB text exactly as set? How long does `SetText` take for 64 KB? | Export fidelity |
+
+Added after Codex round 1:
+- **P2** also measures the real structure: the handler body inside `pcall`, the level computed in
+  the body, stack and locals checked separately; a library-style report site (`debugstack(2)` after
+  a `pcall`); and the stack of an `ADDON_ACTION_*` / `LUA_WARNING` event handler.
+- **P5/P6**: a `C_Timer.After(0)` scheduled during file loading: when does it run relative to
+  `ADDON_LOADED`, is our saved table there yet, and what happens while records remain.
+- **P7**: errors raised between an embedded copy's takeover and our next `ADDON_LOADED` (the
+  backfill window), repeats while the collector's counter changes, duplicate warnings/actions during
+  the switch. Each variant in a fresh `/reload`: the collector's no-op `seterrorhandler` makes
+  restoring a handler in the same session impossible for code that did not keep the original
+  setter (the probe); Bugsy could keep it, and chooses not to re-take the handler.
+- **P8**: sustained floods across many frames, very large message strings, and (with Bugsy
+  loaded) all-muted capacity and the quality of the first-2/last-3 samples.
+- **P9**: a failure in the scheduling call and in the recovery path; `busy` resets and the next
+  error is still captured.
+- **P1**: also event arguments and library values, not only the diagnostic strings.
+
+Added after the Fable review (2026-11-17):
+- **P2** also raises an error through a chaining wrapper (`geterrorhandler()` captured, a wrapper
+  installed that calls it) and inside an `OnEvent` script. The probe calls `debugstack` and
+  `debuglocals` **directly**, as Bugsy does: through `pcall` every level would be one short.
+- **P13**: the probe saves the first 12 lines of real stacks (`records[i].fixture`). They become
+  the parser's test fixtures before g1 is frozen: a later `sigAlgo` bump orphans problems and mutes.
+- **P14**: `GetTime()` inside one frame and during loading (each record's `time`): the token
+  buckets refill by it.
+- **P7** also covers a chaining wrapper, a handler replaced after login (seen at the next drain),
+  and the standalone collector loading before `!Bugsy`. A non-English client is not measurable
+  here; the design no longer depends on the collector's localised text.
+- **Assumption made explicit**: a scheduled `C_Timer.After(0)` fires. Bugsy re-arms a flag older
+  than a second anyway (watchdog), so a lost timer delays the drain, never stops it.
+
+Limits of what can be measured:
+- A native handler cannot capture an error raised **before it was installed**. P5's
+  earlier-addon case establishes that boundary; it cannot show retroactive capture.
+- **P3** needs an observation period (a play session with the passive listener on); no warnings
+  seen is inconclusive, not "never".
+
+## 7. Measured
+
+Nothing yet. Results go here with the build, and addon-agnostic ones in
+`References\Docs\PORTING-TBC-TO-FOREVER.md`.

@@ -1,0 +1,118 @@
+-- wow_stubs.lua: Bugsy's WoW: Forever mock for Lua 5.1 unit tests.
+-- dofile("tests/wow_stubs.lua") FIRST in every test; drive it through WoW.
+--
+-- The mechanics are WowTestKit's (tests/kit.lua loads the commit and build that
+-- tests/kit.pin names). This file adds the client APIs Bugsy touches: the error
+-- handler and stack functions, add-on metadata, the chat frame, EventRegistry.
+-- Each is in the 70959 dump; behaviour is modelled on Blizzard's source where it
+-- matters (Blizzard_ScriptErrors.lua for the stack formula).
+
+dofile("tests/kit.lua")
+local Methods = WoW.Methods
+local newWidget = WoW.newWidget
+
+local function resetBugsy()
+    WoW.cvars = { taintLog = "0" }
+    WoW.handler = nil
+    WoW.stack = "[Interface/AddOns/TestAddon/Core.lua]:10: in function <Interface/AddOns/TestAddon/Core.lua:5>\n[C]: ?"
+    WoW.locals = "self = <table>\nx = 1"
+    WoW.errorHeight = 3
+    WoW.callHeight = 10
+    WoW.stackCalls = {}
+    WoW.instance = "none"
+    WoW.clock = 1763400000
+    WoW.ms = 0
+    WoW.addons = {
+        { name = "TestAddon", title = "Test Addon", loaded = true, meta = { Version = "1.2.3", ["X-Website"] = "https://example.org/testaddon" } },
+        { name = "OtherAddon", title = "Other Addon", loaded = true, meta = { Version = "0.9" } },
+        { name = "!Bugsy", title = "Bugsy", loaded = true, meta = { Version = "dev" } },
+    }
+    WoW.playerName, WoW.realm = "Karuzo", "Morphisto"
+    WoW.lines = {}
+end
+table.insert(WoW.onReset, resetBugsy)
+resetBugsy()
+
+-- Templates (only what the code reads back).
+WoW.templates.UIPanelScrollFrameTemplate = function(w) w.ScrollBar = newWidget("Slider", w) end
+
+-- Widget methods the core lacks.
+function Methods.HighlightText(e) e._highlighted = true end
+function Methods.SetFocus(e) e._focus = true end
+function Methods.ClearFocus(e) e._focus = false end
+function Methods.LockHighlight(b) b._locked = true end
+function Methods.UnlockHighlight(b) b._locked = false end
+function Methods.AddMessage(f, text) table.insert(WoW.lines, text) end
+function Methods.SetScrollChild(s, c) s._child = c end
+
+-- Client functions ------------------------------------------------------------------
+
+SlashCmdList = {}
+WOW_PROJECT_ID = 21
+function date(fmt, t) return os.date(fmt, t or WoW.clock) end
+function time() return WoW.clock end
+function GetBuildInfo() return "1.60.1", "70959", "Nov 13 2026", 16001 end
+function UnitName(unit) if unit == "player" then return WoW.playerName, nil end end
+function GetRealmName() return WoW.realm end
+function IsInInstance() return WoW.instance ~= "none", WoW.instance end
+function debugprofilestop() return WoW.ms end
+C_CVar = { GetCVar = function(name) return WoW.cvars[name] end }
+
+-- Secret checks: the kit's proxies are the secrets; everything else is accessible.
+function canaccessvalue(v) return not issecretvalue(v) end
+function canaccesstable(t) return not issecretvalue(t) end
+
+-- The error handler, as the client keeps it.
+function seterrorhandler(fn) WoW.handler = fn end
+function geterrorhandler() return WoW.handler end
+function GetCallstackHeight() return WoW.callHeight end
+function GetErrorCallstackHeight() return WoW.errorHeight end
+function debugstack(level, top, bottom)
+    table.insert(WoW.stackCalls, { level = level, top = top, bottom = bottom })
+    local s = WoW.stack
+    if top and type(s) == "string" then
+        local out, n = {}, 0
+        for line in s:gmatch("[^\n]+") do
+            n = n + 1
+            if n > top then break end
+            out[#out + 1] = line
+        end
+        s = table.concat(out, "\n")
+    end
+    return s
+end
+function debuglocals(level) return WoW.locals end
+
+-- Raise an error the way the client does: call the installed handler.
+function WoW.raise(msg) if WoW.handler then return WoW.handler(msg) end end
+
+local function addon(nameOrIndex)
+    if type(nameOrIndex) == "number" then return WoW.addons[nameOrIndex] end
+    for _, a in ipairs(WoW.addons) do if a.name == nameOrIndex then return a end end
+end
+C_AddOns = {
+    GetAddOnMetadata = function(name, field) local a = addon(name); return a and a.meta[field] end,
+    IsAddOnLoaded = function(name) local a = addon(name); return a and a.loaded or false, a and a.loaded or false end,
+    GetNumAddOns = function() return #WoW.addons end,
+    GetAddOnInfo = function(i)
+        local a = addon(i)
+        if a then return a.name, a.title, "", true, nil, "INSECURE" end
+    end,
+}
+
+DEFAULT_CHAT_FRAME = newWidget("ScrollingMessageFrame", UIParent, "ChatFrame1")
+
+-- EventRegistry: callbacks by event, called synchronously.
+EventRegistry = { _cb = {} }
+function EventRegistry:RegisterCallback(event, fn, owner)
+    self._cb[event] = self._cb[event] or {}
+    table.insert(self._cb[event], { fn = fn, owner = owner })
+end
+function EventRegistry:TriggerEvent(event, ...)
+    for _, c in ipairs(self._cb[event] or {}) do c.fn(c.owner, ...) end
+end
+
+-- The other error collector's public names (Capture.COLLECTOR must match; test_collector checks).
+COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
+
+Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick" })

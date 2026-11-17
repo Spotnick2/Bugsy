@@ -1,0 +1,20 @@
+package-as: "!Bugsy"
+
+enable-nolib-creation: no
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+# YAML list, not markdown bullets. Every pattern matches the WHOLE path from
+# the package root.
+ignore:
+  - .github
+  - .claude
+  - docs
+  - tests
+  - Tools
+  - CLAUDE.md
+  - README.md
+  - README.curseforge.md
+  - CHANGELOG.md
