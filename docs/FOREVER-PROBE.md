@@ -444,7 +444,7 @@ the wrapper's pass-backs). Both procedures: all checks passed.
 | Burst | Delivered to Bugsy | Marker | Bugsy's observation |
 |---|---|---|---|
 | 99 | 99 + marker | delivered | none |
-| 99 again, 5 s later, same session | 99 + marker | delivered (not stored: Bugsy's 150 new-problem cap was full, a probe flaw) | none |
+| 99 again, 5 s later, same session | 99 + marker | delivered (rev 3: received; the first run's marker was dropped by the 150 new-problem cap, a probe flaw since fixed) | none |
 | 100 (fresh reload) | 100 | **not delivered** | suspected, burst, 100 calls |
 | 101 (fresh reload) | 100 (the 101st not delivered) | **not delivered** | suspected, burst, 100 calls |
 
@@ -455,6 +455,9 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   101 errors; it came with 1 000 (`floods`). So it cannot be relied on; the burst count is the
   signal, and Bugsy's `BURST_LIMIT = 100` matches the client's exactly.
 - **[game, 70959]** A forbidden call after the pause was still recorded (events are separate).
+- **[game, 70959]** Rerun with `pause` rev 3 (both markers raised from one line, the default cap
+  on): the same results in every row, and the `99again` marker now received. Each 99 run
+  delivered 100 (the burst + its marker).
 
 **The breaker** (the wrapper addon disabled, a probe wrapper behind Bugsy with a fixed cost):
 - **[game, 70959]** Three 20 ms pass-ons 0.5 s apart: not suspended.
