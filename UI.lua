@@ -110,6 +110,9 @@ function UI.StatusText()
     local s = "Bugsy is " .. mode .. "."
     if lost > 0 then s = s .. " " .. lost .. " errors this session were only counted (flood)." end
     if failures > 0 then s = s .. " " .. failures .. " internal failures." end
+    local S = ns.Capture.state
+    if S.health.pause then s = s .. " Error reporting may be paused: see /bugsy status." end
+    if S.forward.suspended then s = s .. " Passing errors on is suspended: see /bugsy status." end
     return s
 end
 

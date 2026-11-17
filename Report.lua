@@ -63,6 +63,9 @@ local function captureSection()
         session = { suppressed = copy(S.stats.suppressed), queueDropped = S.stats.queueDropped,
             passSuppressed = S.stats.passSuppressed, forwardFailed = S.stats.forwardFailed },
         lifetime = { evicted = db and db.stats.evicted or 0 },
+        -- snapshots (#14, #11): health names the capture session it was observed in
+        health = Capture.healthSnapshot(),
+        forward = Capture.forwardSnapshot(),
     }
 end
 
@@ -299,7 +302,24 @@ local function minimal(r)
         addons[i] = { name = Context.capped(a.name, 64), version = Context.capped(a.version, 32) }
     end
     local function n(v) return type(v) == "number" and v or nil end
+    local function s(v, max) return type(v) == "string" and Context.capped(v, max) or nil end
+    -- capture health and forwarding survive the minimal report (Codex, #14/#11 round 3)
+    local cap = r.capture or {}
+    local hp = type(cap.health) == "table" and type(cap.health.pause) == "table" and cap.health.pause or nil
+    local fw = type(cap.forward) == "table" and cap.forward or nil
+    local capture = { mode = s(cap.mode, 16) }
+    if hp then
+        capture.health = { pause = { status = s(hp.status, 16), evidence = s(hp.evidence, 16), at = n(hp.at),
+            session = n(hp.session), observedCalls = n(hp.observedCalls), deliveredAfter = n(hp.deliveredAfter),
+            noticeSeen = n(hp.noticeSeen) } }
+    end
+    if fw then
+        capture.forward = { suspended = fw.suspended == true, reason = s(fw.reason, 16), at = n(fw.at),
+            elapsedMs = n(fw.elapsedMs), windowMs = n(fw.windowMs), thresholdMs = n(fw.thresholdMs),
+            skipped = n(fw.skipped), timingUnavailable = n(fw.timingUnavailable) }
+    end
     return {
+        capture = capture,
         schema = Report.SCHEMA, reportId = Context.capped(r.reportId, 24), createdAt = n(r.createdAt),
         client = { build = Context.capped(r.client and r.client.build, 16),
             locale = Context.capped(r.client and r.client.locale, 8) },
@@ -369,6 +389,19 @@ function Report.Markdown(r)
     add(format("Client Forever %s (%s), %s · captured %s · locals %s", tostring(c.version), tostring(c.build),
         tostring(c.locale), r.capture and r.capture.mode or "?",
         (r.capture and r.capture.localsEnabled) and "on" or "off"))
+    -- rendered from the structured fields, so a minimal report shows them too
+    local hp = r.capture and type(r.capture.health) == "table" and r.capture.health.pause
+    if type(hp) == "table" then
+        add(format("Capture health: error reporting %s (evidence: %s; session %s; %s calls in one burst; %s received since)",
+            hp.status == "reported" and "reported paused by the game" or "possibly paused by the game",
+            tostring(hp.evidence), tostring(hp.session), tostring(hp.observedCalls), tostring(hp.deliveredAfter)))
+    end
+    local fw = r.capture and r.capture.forward
+    if type(fw) == "table" and fw.suspended then
+        add(format("Forwarding: suspended after a slow call (%s; %s ms, %s ms in the last second, threshold %s ms); %s errors not passed on",
+            tostring(fw.reason), tostring(fw.elapsedMs and math.floor(fw.elapsedMs + 0.5)),
+            tostring(fw.windowMs and math.floor(fw.windowMs + 0.5)), tostring(fw.thresholdMs), tostring(fw.skipped)))
+    end
     add("")
     local pl = r.player or {}
     if pl.doing or pl.happened or pl.expected or pl.steps or pl.noVisibleProblem then

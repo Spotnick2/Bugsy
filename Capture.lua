@@ -31,6 +31,16 @@ Capture.FALLBACK_LEVEL = 4
 -- global it publishes and the EventRegistry event it fires for each error.
 -- Interoperability only: Bugsy reads its public API and uses none of its code.
 Capture.COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
+-- Capture health (#14, DESIGN §6): the client pauses error reporting after a burst
+-- (measured: 100 errors in one frame, FOREVER-PROBE §7). Bugsy counts eligible
+-- deliveries per "same timestamp" and records a suspicion at BURST_LIMIT; the
+-- English notice is only an optional hint (D15): another locale changes nothing else.
+Capture.BURST_LIMIT = 100
+Capture.PAUSE_NOTICE_EN = "Error reporting is now paused and will resume after reloading the UI."
+-- The front's circuit breaker (#11, D16): provisional thresholds, not measured limits.
+Capture.FRONT_SLOW_CALL_MS = 50
+Capture.FRONT_SLOW_WINDOW_MS = 100
+Capture.BIN_MS, Capture.BINS = 100, 10     -- a rolling ~1 s window of stamped bins
 
 -- State ----------------------------------------------------------------------
 
@@ -45,7 +55,11 @@ local S = {
     water = setmetatable({}, { __mode = "k" }),
     settings = { locals = false },
     stats = { suppressed = {}, queueDropped = 0, drainFailed = 0, scheduleFailed = 0, countDropped = 0,
-        passSuppressed = 0, passReturned = 0, forwardFailed = 0, nativeInCollector = 0 },
+        passSuppressed = 0, passReturned = 0, forwardFailed = 0, nativeInCollector = 0, deliveries = 0 },
+    burst = { t = nil, n = 0 },     -- eligible deliveries in the current same-timestamp bucket
+    health = { pause = nil },       -- the pause observation (#14), never a reason to refuse a call
+    forward = { suspended = false, skipped = 0, timingUnavailable = 0, bins = {}, stamps = {} },
+    session = nil,                  -- the store's session, set at our ADDON_LOADED
     passing = false,
     frontEnabled = nil,       -- set once a session from the saved setting (Bugsy.lua); nil: never front
     frontTried = false,       -- one attempt a UI session
@@ -307,11 +321,61 @@ end
 
 -- Our original handler. Order (Codex, front design): the passing guard, collector
 -- exclusion, the busy guard, liveness, capture.
+-- A health observation changed: Bugsy.lua sets this to queue one notice (cheap; never chat here).
+local function healthChanged()
+    if Capture.onHealth then
+        local ok, err = pcall(Capture.onHealth)
+        if not ok then fail(err) end
+    end
+end
+
+-- One eligible delivery (#14): a call that passed the guards, with a readable numeric
+-- error height (0 included; nil = a direct report, not counted). Counted before any
+-- tier, queue or store decision. Returns true when the message is the client's pause
+-- notice (English, exact): that one is a health observation, not a problem.
+local function observeDelivery(msg)
+    local eh = G("GetErrorCallstackHeight")
+    local h = eh and eh()
+    if type(h) ~= "number" or not Safe.readable(h) then return false end
+    S.stats.deliveries = S.stats.deliveries + 1
+    local now = API.Uptime()
+    local b = S.burst
+    if b.t == now then b.n = b.n + 1 else b.t, b.n = now, 1 end
+    local isNotice = type(msg) == "string" and Safe.readable(msg) and msg == Capture.PAUSE_NOTICE_EN
+    local p = S.health.pause
+    if p and not isNotice and now ~= p.bucket then p.deliveredAfter = p.deliveredAfter + 1 end
+    if b.n >= Capture.BURST_LIMIT or isNotice then
+        if not p then
+            p = { status = "suspected", evidence = "burst", at = API.Now(), session = S.session,
+                observedCalls = 0, deliveredAfter = 0, noticeSeen = 0, bucket = now }
+            S.health.pause = p
+            healthChanged()
+        end
+        if b.n >= Capture.BURST_LIMIT and now == p.bucket and b.n > p.observedCalls then p.observedCalls = b.n end
+    end
+    if isNotice then
+        p.noticeSeen = p.noticeSeen + 1
+        if p.status ~= "reported" then
+            p.status = "reported"
+            p.evidence = (p.observedCalls >= Capture.BURST_LIMIT) and "both" or "message"
+            healthChanged()
+        end
+        return true
+    end
+    return false
+end
+local function delivered(msg)
+    local ok, notice = pcall(observeDelivery, msg)
+    if not ok then fail(notice); return false end
+    return notice
+end
+
 function Capture.handler(msg)
     if S.passing then whilePassing(msg); return end
     if S.mode == "collector" then S.stats.nativeInCollector = S.stats.nativeInCollector + 1; return end
     if S.busy then S.nested = S.nested + 1; return end
     liveness()
+    if delivered(msg) then return end
     S.busy = true
     local ok, err = pcall(body, "error", msg)
     S.busy = false
@@ -333,17 +397,53 @@ function Capture.front(msg, ...)
         S.nested = S.nested + 1
     else
         liveness()
-        S.busy = true
-        local ok, err = pcall(body, "error", msg, nil, "front")
-        S.busy = false
-        if not ok then fail(err) end
+        if not delivered(msg) then
+            S.busy = true
+            local ok, err = pcall(body, "error", msg, nil, "front")
+            S.busy = false
+            if not ok then fail(err) end
+        end
     end
     local nextH = S.nextHandler
-    if nextH then
-        S.passing, S.passingMsg, S.passReturnedOnce = true, msg, false
-        local okF, errF = pcall(nextH, msg, ...)
-        S.passing, S.passingMsg = false, nil
-        if not okF then S.stats.forwardFailed = S.stats.forwardFailed + 1; fail(errF) end
+    if not nextH then return end
+    local F = S.forward
+    if F.suspended then F.skipped = F.skipped + 1; return end
+    local t0 = API.ProfileTime()
+    S.passing, S.passingMsg, S.passReturnedOnce = true, msg, false
+    local okF, errF = pcall(nextH, msg, ...)
+    S.passing, S.passingMsg = false, nil          -- first, before anything that can fail
+    if not okF then S.stats.forwardFailed = S.stats.forwardFailed + 1; fail(errF) end
+    local okA, errA = pcall(Capture._accountForward, t0)
+    if not okA then fail(errA) end
+end
+
+-- The circuit breaker (#11, D16): time each pass-on (slow calls that threw included);
+-- one call at FRONT_SLOW_CALL_MS, or FRONT_SLOW_WINDOW_MS within the rolling window
+-- (BINS stamped bins of BIN_MS), latches the suspension for this UI session. It
+-- cannot bound the first slow call; it stops the next ones. Timing that is missing,
+-- unreadable or backwards is counted, never taken as fast or slow.
+function Capture._accountForward(t0)
+    local F = S.forward
+    local t1 = API.ProfileTime()
+    if not t0 or not t1 or t1 < t0 then F.timingUnavailable = F.timingUnavailable + 1; return end
+    local elapsed = t1 - t0
+    local bin = math.floor(t1 / Capture.BIN_MS)
+    local i = bin % Capture.BINS + 1
+    if F.stamps[i] ~= bin then F.stamps[i], F.bins[i] = bin, 0 end
+    F.bins[i] = F.bins[i] + elapsed
+    local window = 0
+    for k = 1, Capture.BINS do
+        local stamp = F.stamps[k]
+        if stamp and bin - stamp < Capture.BINS then window = window + F.bins[k] end
+    end
+    local reason
+    if elapsed >= Capture.FRONT_SLOW_CALL_MS then reason = "call"
+    elseif window >= Capture.FRONT_SLOW_WINDOW_MS then reason = "window" end
+    if reason and not F.suspended then
+        F.suspended, F.reason, F.at = true, reason, API.Now()
+        F.elapsedMs, F.windowMs = elapsed, window
+        F.thresholdMs = (reason == "call") and Capture.FRONT_SLOW_CALL_MS or Capture.FRONT_SLOW_WINDOW_MS
+        healthChanged()
     end
 end
 
@@ -586,8 +686,24 @@ function Capture.check(afterAddon)
     return S.mode
 end
 
--- What the status line and reports say about this mode.
-function Capture.limits()
+-- Snapshots for reports (bounded scalars only; copies, not the live state).
+function Capture.healthSnapshot()
+    local p = S.health.pause
+    if not p then return nil end
+    return { pause = { status = p.status, evidence = p.evidence, at = p.at, session = p.session,
+        observedCalls = p.observedCalls, deliveredAfter = p.deliveredAfter, noticeSeen = p.noticeSeen } }
+end
+
+function Capture.forwardSnapshot()
+    local F = S.forward
+    if not S.nextHandler and not F.suspended then return nil end
+    return { suspended = F.suspended, reason = F.reason, at = F.at, elapsedMs = F.elapsedMs,
+        windowMs = F.windowMs, thresholdMs = F.thresholdMs, skipped = F.skipped,
+        timingUnavailable = F.timingUnavailable }
+end
+
+-- The mode's own limits; Capture.limits adds the health observations.
+local function modeLimits()
     if S.mode == "collector" then
         return {
             "Lua errors come from another error collector: it does not store errors whose message is secret.",
@@ -608,6 +724,30 @@ function Capture.limits()
             "Stacks that handler records may be off by Bugsy's frames." }
     end
     return {}
+end
+
+-- What the status line, /bugsy status and reports say: the mode's limits, then the
+-- health observations (#14, #11), whatever the mode.
+function Capture.limits()
+    local out = modeLimits()
+    local p = S.health.pause
+    if p then
+        if p.status == "reported" then
+            out[#out + 1] = "Bugsy received a message saying Lua error reporting is paused until reload."
+        else
+            out[#out + 1] = "A large error burst was observed. The game may have paused Lua error reporting; "
+                .. "Bugsy cannot verify whether more errors are being delivered. Reload to reset reporting."
+        end
+        if p.deliveredAfter > 0 then
+            out[#out + 1] = ("Bugsy has received %d errors since, so reporting did not fully stop."):format(p.deliveredAfter)
+        end
+        out[#out + 1] = "Warnings and blocked-action events are captured separately."
+    end
+    if S.forward.suspended then
+        out[#out + 1] = "Bugsy stopped passing errors to the handler it replaced after a slow call. Bugsy still "
+            .. "captures the errors it receives; that handler no longer gets them from Bugsy. Reload to retry."
+    end
+    return out
 end
 
 ns._test = ns._test or {}
