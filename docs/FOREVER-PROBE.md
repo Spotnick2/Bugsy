@@ -254,3 +254,13 @@ each reaching the probe's measuring handler alone. Blizzard showed nothing (owne
   was not produced; Bugsy's markers for it remain defensive and unmeasured. Locals of code that
   touched combat data were readable here; whether `debuglocals` prints secret values inside them
   (and how) is not visible from the saved head.
+
+### `combat` (P6): build 70959, 2026-11-17
+
+- **[game, 70959]** An error raised by a timer in combat reached the probe's measuring handler
+  (`InCombatLockdown()` true). The handler wrote its tables and scheduled a `C_Timer.After` from
+  inside itself; that timer ran (1 of 1). No `ADDON_ACTION_BLOCKED` appeared afterwards (owner).
+  So writing tables and scheduling the drain from the handler in combat is clean.
+- **Not covered:** `taintLog` was off, so taint lines from the handler were not looked for. The
+  front design's `frontown` procedure runs with `taintLog` on and covers that (and installing a
+  handler in combat).

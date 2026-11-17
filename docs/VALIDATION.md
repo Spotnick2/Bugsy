@@ -3,7 +3,7 @@
 State of the first vertical slice (2026-11-17, build 70959). Two kinds of evidence, never mixed:
 **automated** checks run offline against WowTestKit's mock (pinned commit `38fb0fc`, build data
 70959), and **in-game** checks, which are the only proof of taint, stack levels, secrets and client
-behaviour. In game, `stacks` and `secrets` have run (build 70959, results in FOREVER-PROBE §7); the rest have not.
+behaviour. In game, `stacks`, `secrets` and `combat` have run (build 70959, results in FOREVER-PROBE §7); the rest have not.
 
 ## Automated (`pwsh tests\run.ps1`: 7 files, all passing)
 
@@ -36,7 +36,7 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 |---|---|---|
 | `stacks` | **Done, 70959: passed.** P2 formula exact where `GetErrorCallstackHeight` is set, fallback 4 confirmed, a tail-calling wrapper harmless; P11 identity works; P13 fixtures in `test_fixtures`. P14 within a frame left to `floods` | yes |
 | `secrets` | **Done, 70959.** P1: three tainted errors in combat; message, stack and locals all readable, the two checks agree; new secret-boolean wording matched; a table error arrives as `UNKNOWN ERROR`. A secret *message* was not produced: those markers stay unmeasured | yes |
-| `combat` | P6: an error in combat, a timer scheduled from the handler | yes |
+| `combat` | **Done, 70959.** P6: the handler in combat writes its tables and its timer runs; no blocked action. taintLog was off: taint lines are left to `frontown` | yes |
 | `early` | P5: errors during loading, `LoadSavedVariablesFirst`, a timer during load | yes |
 | `floods` | P8: 1 000 identical and 1 000 unique errors. Run it with any addon that wraps the error handler disabled (one stops passing errors on after a flood, §7), unless measuring that | yes |
 | `throw` | P9: a handler that throws | yes |
