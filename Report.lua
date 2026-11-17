@@ -52,7 +52,7 @@ end
 local function captureSection()
     local S = Capture.state
     local changes = {}
-    for i, c in ipairs(S.changes) do changes[i] = { at = c.at, afterAddon = c.afterAddon } end
+    for i, c in ipairs(S.changes) do changes[i] = { at = c.at, afterAddon = c.afterAddon, action = c.action } end
     local db = Store.db()
     return {
         mode = S.mode,
@@ -60,7 +60,8 @@ local function captureSection()
         handlerChangesDropped = S.changesDropped,
         limits = Capture.limits(),
         localsEnabled = S.settings.locals == true,
-        session = { suppressed = copy(S.stats.suppressed), queueDropped = S.stats.queueDropped },
+        session = { suppressed = copy(S.stats.suppressed), queueDropped = S.stats.queueDropped,
+            passSuppressed = S.stats.passSuppressed, forwardFailed = S.stats.forwardFailed },
         lifetime = { evicted = db and db.stats.evicted or 0 },
     }
 end

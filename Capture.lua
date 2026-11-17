@@ -45,7 +45,7 @@ local S = {
     water = setmetatable({}, { __mode = "k" }),
     settings = { locals = false },
     stats = { suppressed = {}, queueDropped = 0, drainFailed = 0, scheduleFailed = 0, countDropped = 0,
-        passSuppressed = 0, forwardFailed = 0, nativeInCollector = 0 },
+        passSuppressed = 0, passReturned = 0, forwardFailed = 0, nativeInCollector = 0 },
     passing = false,
     frontEnabled = nil,       -- set once a session from the saved setting (Bugsy.lua); nil: never front
     frontTried = false,       -- one attempt a UI session
@@ -285,10 +285,26 @@ local function liveness()
     end
 end
 
+-- A call into Bugsy while the front passes an error on. The first call with that
+-- same message is the next handler passing it back (expected: passReturned); any
+-- other is a distinct report made meanwhile, dropped (passSuppressed, a loss the
+-- status and reports state). An unreadable message cannot be compared: its first
+-- re-entry counts as the return.
+local function whilePassing(msg)
+    local same = true
+    if Safe.readable(msg) and Safe.readable(S.passingMsg) then same = rawequal(msg, S.passingMsg) end
+    if same and not S.passReturnedOnce then
+        S.passReturnedOnce = true
+        S.stats.passReturned = S.stats.passReturned + 1
+    else
+        S.stats.passSuppressed = S.stats.passSuppressed + 1
+    end
+end
+
 -- Our original handler. Order (Codex, front design): the passing guard, collector
 -- exclusion, the busy guard, liveness, capture.
 function Capture.handler(msg)
-    if S.passing then S.stats.passSuppressed = S.stats.passSuppressed + 1; return end
+    if S.passing then whilePassing(msg); return end
     if S.mode == "collector" then S.stats.nativeInCollector = S.stats.nativeInCollector + 1; return end
     if S.busy then S.nested = S.nested + 1; return end
     liveness()
@@ -306,7 +322,7 @@ end
 -- pass-on reaches Capture.handler later and is recorded again. The next handler runs
 -- outside Bugsy's budget; its failures are counted, never rethrown.
 function Capture.front(msg, ...)
-    if S.passing then S.stats.passSuppressed = S.stats.passSuppressed + 1; return end
+    if S.passing then whilePassing(msg); return end
     if S.mode == "collector" then
         S.stats.nativeInCollector = S.stats.nativeInCollector + 1
     elseif S.busy then
@@ -320,9 +336,9 @@ function Capture.front(msg, ...)
     end
     local nextH = S.nextHandler
     if nextH then
-        S.passing = true
+        S.passing, S.passingMsg, S.passReturnedOnce = true, msg, false
         local okF, errF = pcall(nextH, msg, ...)
-        S.passing = false
+        S.passing, S.passingMsg = false, nil
         if not okF then S.stats.forwardFailed = S.stats.forwardFailed + 1; fail(errF) end
     end
 end
@@ -581,9 +597,10 @@ function Capture.limits()
         return { "Another addon's error handler passes errors on to Bugsy; stacks may start in its frames.",
             "That addon may keep some errors for itself, or stop passing errors on after a flood." }
     elseif S.mode == "front" then
-        return { "Bugsy is installed ahead of another addon's error handler. It passes each Lua error it "
-            .. "receives on to that handler after capturing it; an error that handler reports again while "
-            .. "handling one is not recorded twice.",
+        return { "Bugsy is installed ahead of another addon's error handler and passes each Lua error it "
+            .. "receives on to that handler after capturing it.",
+            "A different error that handler reports while it handles one is not recorded (counted as "
+            .. "dropped). If that handler passes errors on later rather than at once, Bugsy records them twice.",
             "Stacks that handler records may be off by Bugsy's frames." }
     end
     return {}

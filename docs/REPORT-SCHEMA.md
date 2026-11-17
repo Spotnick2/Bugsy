@@ -38,7 +38,9 @@ capture           { mode ("native" | "collector" | "displaced" | "chained" | "fr
                     handlerChangesDropped,                           -- last 5
                     limits = [ "<text>" ],                           -- what the mode cannot do
                     localsEnabled,
-                    session = { suppressed = { [kind] = n }, queueDropped },   -- this session,
+                    session = { suppressed = { [kind] = n }, queueDropped,     -- this session,
+                                passSuppressed,   -- front: distinct reports dropped while passing on
+                                forwardFailed },  -- front: the next handler failed
                                                                      -- all problems together
                     lifetime = { evicted } }
 

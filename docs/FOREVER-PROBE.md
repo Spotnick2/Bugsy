@@ -279,7 +279,40 @@ each reaching the probe's measuring handler alone. Blizzard showed nothing (owne
   installs its own chaining wrapper and Bugsy installs itself in front of it **in combat**; a
   real error and a direct report, with the probe's wrapper recording the error height, call
   height and stack it sees downstream (offsets documented from the result); a distinct report
-  made by that wrapper while handling one is dropped (`passSuppressed` +2: the report and the
-  wrapper's normal pass-on); a throwing wrapper is counted (`forwardFailed`) and the next error is
+  made by that wrapper while handling one is dropped (`passSuppressed` +1; the wrapper's
+  normal pass-back counts as `passReturned`); a throwing wrapper is counted (`forwardFailed`) and the next error is
   still recorded; a later wrapper saving the front gets no second front and the error is recorded
   once. Afterwards the taint log (`Logs\taint.log`) is read for lines naming Bugsy or the probe.
+
+### `front` and `frontown` (P7, P6): build 70959, 2026-11-17
+
+Run on the front-mode branch before the `passReturned` split (`passSuppressed` then also counted
+the wrapper's pass-backs). Both procedures: all checks passed.
+
+**`front`** (the wrapper addon enabled, no collector, fresh reload):
+- **[game, 70959]** Bugsy was in front at the start (`mode=front`, installed after the wrapper
+  addon's load). An ordinary error, an error matching the wrapper's own-error filter, an error
+  with locals (kept) and a direct report were each recorded once, `entry=front`, full tier, with
+  the raise site as the first location (the direct report: its caller).
+- **[game, 70959]** 1 100 identical errors over about 2 s: the wrapper passed **1 000** back
+  (`passSuppressed` = 1 000 at the end, all pass-backs then) and stopped: its cutoff, measured.
+  Bugsy kept capturing: 173 occurrences sampled at full or top tier, the rest counted, and a
+  marker raised afterwards was recorded at full tier. That addon showed nothing (owner).
+
+**`frontown`** (the wrapper addon disabled, `taintLog 1`, fresh reload, in combat):
+- **[game, 70959]** Bugsy installed its front ahead of the probe's wrapper **in combat**, from
+  the drain's check, within a second of the first error. No blocked action or "interface action
+  failed" message (owner), and nothing was written to `Logs\taint.log` while `taintLog` was 1
+  (Bugsy recorded the CVar as `"1"` with these errors; the file's last write predates the run).
+- **[game, 70959]** **Downstream stack levels hold for real errors:** the probe's wrapper, called
+  through the front, computed its level with Blizzard's formula and landed on the raise site
+  (`callH` 6, `errH` 1, level 6; 4 before the front existed). The front and its `pcall` add two
+  levels to both sides. For a **direct report** (no error height) a handler using a fixed level
+  sees Bugsy's frames: `debugstack(2)` starts `[C]: ?`, then `!Bugsy/Capture.lua` (the front),
+  then the caller: the documented offset.
+- **[game, 70959]** A distinct report made by the wrapper while handling an error was not
+  recorded and was counted. A wrapper that threw was counted (`forwardFailed` 1) and the next
+  error was still recorded. A later wrapper saving the front: the error was recorded once,
+  through the later wrapper, the front and the first wrapper; no second front; mode chained.
+  Behind that later tail-calling wrapper the downstream stack started with `[C]: in function
+  'error'` (the measured one-level shift).

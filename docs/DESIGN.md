@@ -103,8 +103,9 @@ session) and this session has not tried yet, Bugsy:
    records the transition with `action = "front"`.
 
 `Capture.front` runs, in this order: the **passing guard** (while it is passing an error on, any
-call into either of our entry points is dropped and counted, `passSuppressed`: the wrapper
-passing the error back to our original handler, or a distinct report it makes meanwhile);
+call into either of our entry points is not recorded: the first call with the same message is the
+wrapper passing it back, `passReturned`; any other is a distinct report made meanwhile, dropped and
+counted as a loss, `passSuppressed`, which the status and reports include);
 **collector exclusion** (in collector mode no native capture, `nativeInCollector`, but it still
 passes on); the busy guard; liveness; capture with the **same nesting as the handler**
 (front → `pcall` → body, so the measured levels and `FALLBACK_LEVEL` hold); then **passing on**,

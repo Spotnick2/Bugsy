@@ -665,7 +665,7 @@ Probe:Steps("front", {
 })
 
 Probe:Steps("frontown", {
-    title = "Bugsy installing itself ahead of a wrapper in combat (P6, P7, frontown)", rev = 1,
+    title = "Bugsy installing itself ahead of a wrapper in combat (P6, P7, frontown)", rev = 2,
     { text = "Needs: the addon that installs its own error handler DISABLED, no error collector, /bugsy front on, /console taintLog 1, then a fresh /reload. Press Run to check.",
       run = function() local d = frontState("own-start"); return d.mode == "native" and not d.frontTried, tostring(d.mode) end,
       check = function() local s = BugsyProbeDB.front["own-start"]
@@ -699,7 +699,7 @@ Probe:Steps("frontown", {
           local before = BugsyProbeDB.front["own-before-recurse"]
           local d = frontState("own-after-recurse")
           local inner = recorded("BugsyProbe frontown inner", "own-inner")
-          return (inner.count or 0) == 0 and (d.passSuppressed or 0) >= (before.passSuppressed or 0) + 2,
+          return (inner.count or 0) == 0 and (d.passSuppressed or 0) >= (before.passSuppressed or 0) + 1,
               "inner dropped; passSuppressed " .. tostring(before.passSuppressed) .. " -> " .. tostring(d.passSuppressed) end },
     { text = "Press Run: an error during which the probe's wrapper throws, then another error.",
       run = function()

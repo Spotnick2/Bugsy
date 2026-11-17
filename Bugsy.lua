@@ -84,7 +84,7 @@ function Bugsy.Status()
     local queued, counts = Capture.pending()
     local lost = 0
     for _, n in pairs(S.stats.suppressed) do lost = lost + n end
-    return mode, lost + S.stats.queueDropped, S.failures, queued + counts
+    return mode, lost + S.stats.queueDropped + S.stats.passSuppressed, S.failures, queued + counts
 end
 
 -- For BugsyProbe: the raw capture mode, whether the other collector's API is present,
@@ -95,7 +95,8 @@ function Bugsy.Diagnostics(match)
     local S = Capture.state
     local d = { mode = S.mode, collector = Capture.collectorUsable() ~= nil, frontTried = S.frontTried,
         frontEnabled = S.frontEnabled, fronted = G("geterrorhandler") and G("geterrorhandler")() == Capture.front,
-        passSuppressed = S.stats.passSuppressed, forwardFailed = S.stats.forwardFailed,
+        passSuppressed = S.stats.passSuppressed, passReturned = S.stats.passReturned,
+        forwardFailed = S.stats.forwardFailed,
         nativeInCollector = S.stats.nativeInCollector, failures = S.failures }
     if type(match) == "string" and match ~= "" then
         local count, newest = 0, nil
