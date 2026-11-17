@@ -38,6 +38,10 @@ for name, f in pairs(FIXTURES) do
     end
 end
 
+-- A file's main chunk, while it loads (P5): its own line is the location.
+eq(Sig.where(Sig.lines("[Interface/AddOns/BugsyProbe/FileScope.lua]:19: in main chunk\n")),
+    "BugsyProbe/FileScope.lua:19", "a main-chunk frame is a location")
+
 -- The binding chunk and C frames are not locations.
 eq(Sig.parseFrame('[CAMERAORSELECTORMOVE]:4: in function <[string "CAMERAORSELECTORMOVE"]:1>'), nil,
     "a key-binding chunk is not a location")

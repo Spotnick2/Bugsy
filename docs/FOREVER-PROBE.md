@@ -316,3 +316,123 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   through the later wrapper, the front and the first wrapper; no second front; mode chained.
   Behind that later tail-calling wrapper the downstream stack started with `[C]: in function
   'error'` (the measured one-level shift).
+
+### The `early` run hung the client (2026-11-17): a probe bug, and what it showed about front mode
+
+- **Probe bug (fixed):** a record stored before `ADDON_LOADED` lives in the saved table already
+  (`LoadSavedVariablesFirst`), and the probe's boot then appended that table to itself while
+  iterating it: an endless loop (the client grew to about 7 GB and stopped responding). The
+  arming flag was never saved as cleared, so every reload hung again.
+- **[game, 70959] Front mode charges the next handler's time to Bugsy.** During that session Bugsy
+  recorded **85** `LUA_WARNING`s `insecure scripts exceeded execution limit for addon !Bugsy`
+  (location `!Bugsy/Capture.lua:-1`), and several `script ran too long` errors. The slow code was
+  downstream: the wrapper addon passed each error to the probe's measuring handler, whose
+  `table.remove(list, 1)` on the runaway table took seconds. Because the front calls the next
+  handler from inside its own call, the client counted that time against `!Bugsy`. Open: what the
+  client does to an addon past that limit (only a warning, or its scripts stop), and whether Bugsy
+  should bound or stop passing on to a next handler that keeps exceeding it.
+
+### `early` (P5): build 70959, 2026-11-17 (after the probe fix)
+
+- **[game, 70959]** `LoadSavedVariablesFirst` is honoured: the addon's saved table is a table at
+  file scope.
+- **[game, 70959]** A handler installed at file scope is called for an error raised later in the
+  same addon's file load.
+- **[game, 70959]** A `C_Timer.After(0)` scheduled during file load runs **after** that addon's
+  `ADDON_LOADED`. So Bugsy's drain, scheduled by an error before our `ADDON_LOADED`, finds the
+  store attached.
+- **[game, 70959]** **An error in a file's main chunk has `GetErrorCallstackHeight() == 0`**
+  (`callH` 4): Blizzard's formula gives level 5, past the stack, and an **empty** stack. The
+  chunk's line (`[...FileScope.lua]:19: in main chunk`) is at level 4, which height 1 gives.
+  **Fixed in Bugsy:** a height below 1 counts as 1 (test_capture, a fixture in test_fixtures).
+  Blizzard's own handler has the same formula, so its window likely shows an empty stack there.
+- Not measured here: an error from an addon loading **before** `!Bugsy` (P5's boundary: such an
+  error cannot be captured by a handler not yet installed).
+
+### `throw`, `popups`, `copy`, `floods`, `coexist`: build 70959, 2026-11-17 (first runs)
+
+- **[game, 70959] P9: a handler that throws** is neither re-entered nor silently swallowed: the
+  client shows its error in Blizzard's own **Lua Warning** window (with Reload UI) and fires
+  `LUA_WARNING`, which Bugsy's event frame recorded as a warning problem. The next error was
+  captured normally. Bugsy's own handler never throws (everything under `pcall`), so this is the
+  fallback that would show a Bugsy defect, not a path Bugsy relies on.
+- **[game, 70959] P4, in part:** `TargetUnit(name, true)` from an addon raised
+  `ADDON_ACTION_FORBIDDEN` with the function **named** (`TargetUnit()`), not `UNKNOWN()` as the
+  porting guide recorded for 69977, and Blizzard's popup *"<addon> has been blocked from an
+  action only available to the Blizzard UI"* with Disable / Ignore. The second half (does the popup
+  come back once Blizzard's listeners are unregistered, P10) is inconclusive: the first popup was
+  still open. The procedure (rev 2) now says to press Ignore first.
+- **[game, 70959] P12, in part:** 64 575 bytes set in an edit box read back identical, in 0.8 ms.
+  The Ctrl+C half failed for a reason in the probe, not the client: the box lost keyboard focus
+  when the probe's step panel advanced, so Ctrl+C reached the game's key binding (the character
+  window opened). The owner's GlassChat copy window (SetFocus + HighlightText on show, nothing
+  stealing focus after) copies fine, and Bugsy's Copy details and report preview do the same.
+  Rev 2 has a Select button clicked right before Ctrl+C, a paste box compared byte for byte, and
+  a check of Bugsy's own Copy details.
+- **P8, inconclusive:** the first procedure sent its floods to the probe's measuring handler, not
+  Bugsy. Of 1 000 errors raised from timers in **one frame**, 101 reached that handler, and 0 of
+  the next 1 000; the game did not freeze (owner). By contrast, the `front` run's 1 100 errors
+  spread over 2 s all reached Bugsy (173 sampled, 927 counted). So the client may cap how many
+  errors from one frame reach a handler. Rev 2 sends floods to Bugsy and compares one frame with
+  spread, recording the longest frame. Lua memory was about 440 MB in that session (all addons):
+  noted, not yet explained.
+- **P7: not run.** Neither the standalone collector nor the addon that embeds a copy was enabled
+  (the owner had disabled them), so Bugsy ran natively both times. Rev 3 checks the collector is
+  loaded before it goes on.
+
+### Reruns: `floods` rev 2, `coexist` rev 3, `popups` rev 2, `copy` rev 2: build 70959, 2026-11-17
+
+- **[game, 70959] The client pauses error reporting after a burst.** 1 000 identical errors raised
+  from timers in one frame: Bugsy received **100** (55 sampled, 45 counted), then the client called
+  the handler once more with the message *"Error reporting is now paused and will resume after
+  reloading the UI."* (a plain error message, with the 101st error's stack) and stopped calling
+  any error handler. The next two floods (1 000 different errors in one frame, then 1 000 spread
+  over 2 s) delivered **nothing**, until `/reload`. In the `front` run, 1 100 errors spread over
+  2 s from a quiet start were all delivered: the pause is triggered by a burst (100 in one frame
+  measured; the exact window is not). Consequences:
+  - after such a burst Bugsy, like every other collector, is blind until a reload, and the only
+    sign is that notice. Whether its text is translated is unknown (not in Blizzard's UI source:
+    it comes from the client). P15.
+  - Bugsy's per-burst budgets (15 full, 40 top) sit below the client's 100.
+  - no freeze (owner); longest frame 27 ms during the first burst.
+  Rev 3 reloads after each burst and records Bugsy's own memory. Lua memory for all addons stayed
+  about 0.4-0.5 GB; Bugsy's own share is what rev 3 measures.
+- **[game, 70959] P7 with the collector:** with the standalone collector, its viewer and the
+  addon that embeds a copy all enabled, Bugsy started in **collector** mode (the collector's no-op
+  setter: `settable=false`); an error was recorded through the collector (`entry=collector`, full
+  tier, raise site as the location).
+- **[game, 70959] P7, standalone collector disabled, the embedding addon enabled:** its embedded
+  copy did **not** become a collector; that addon installed its own wrapper instead, and Bugsy went
+  **front** (`entry=front`). So on this setup the "embedded copy" case is the wrapper case.
+- **[game, 70959] P10:** after unregistering `ADDON_ACTION_FORBIDDEN`/`BLOCKED` from `UIParent`
+  and `GameEvent`, a second forbidden call raised **no popup**. Taint from doing so: not observed
+  (taintLog off in this run); B-18 still needs that check.
+- **[game, 70959] P12, Bugsy's side:** Copy details then Ctrl+C copied Bugsy's text (pasted into
+  the probe's note intact, line breaks aside: that note box is single-line). The probe's own
+  byte comparison failed again for a probe reason (the step finished on Run, before the paste);
+  rev 3 waits for the owner.
+
+### `floods` rev 3 and `copy` rev 3: build 70959, 2026-11-17
+
+**P8** (Bugsy in front of the wrapper addon; a reload before each burst):
+
+| Flood | Bugsy received | Client pause | Longest frame | `!Bugsy` memory |
+|---|---|---|---|---|
+| 1 000 identical, one frame | 100 | yes, after 100 | 33 ms | 493 → 901 KB |
+| 1 000 different, one frame | 100 | yes, after 100 | 38 ms | 512 → 1 157 KB |
+| 1 000 different, over 4 s | 150 new problems, 850 counted | no | 40 ms | 1 069 → 5 809 KB |
+
+- **[game, 70959]** The pause after 100 errors in one frame is repeatable; 1 000 errors over 4 s
+  (about 250 a second) did not trigger it.
+- **[game, 70959]** A spread unique flood is bounded by Bugsy's per-session cap (150 new problems,
+  D13): the rest are counted, nothing older is evicted. No freeze in any run (owner).
+- `GetAddOnMemoryUsage` includes garbage not yet collected, so these are upper bounds. Bugsy's
+  share of the session's 0.4-0.5 GB of addon memory is small.
+
+**P12** (the owner pasted into the step's note; it escapes `|` as `||` when shown):
+- **[game, 70959]** The line with every `|` doubled (as Bugsy displays text) copies back to the
+  **original** text exactly: `|` sequences, the colour code and UTF-8 (`é漢字`) intact.
+- **[game, 70959]** The raw line copies what is **rendered**: the colour code became plain text
+  "red" and `||` became `|`. So the doubling Bugsy does for display is required for a faithful copy.
+- A tab came back as four spaces in the note; whether the clipboard or the note box converted it
+  is not known.

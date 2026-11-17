@@ -111,17 +111,20 @@ function Bugsy.Diagnostics(match)
         frontEnabled = S.frontEnabled, fronted = G("geterrorhandler") and G("geterrorhandler")() == Capture.front,
         passSuppressed = S.stats.passSuppressed, passReturned = S.stats.passReturned,
         forwardFailed = S.stats.forwardFailed,
-        nativeInCollector = S.stats.nativeInCollector, failures = S.failures }
+        nativeInCollector = S.stats.nativeInCollector, failures = S.failures,
+        queueDropped = S.stats.queueDropped, suppressed = 0 }
+    for _, n in pairs(S.stats.suppressed) do d.suppressed = d.suppressed + n end
     if type(match) == "string" and match ~= "" then
-        local count, newest = 0, nil
+        local count, unconfirmed, newest = 0, 0, nil
         for _, p in ipairs(Store.List("all", true)) do
             if p.title:find(match, 1, true) then
                 count = count + p.count
+                unconfirmed = unconfirmed + (p.unconfirmedRepeats or 0)
                 local s = p.last[#p.last] or p.first[#p.first]
                 if s and (not newest or (s.at or 0) >= (newest.at or 0)) then newest = s end
             end
         end
-        d.count = count
+        d.count, d.unconfirmed = count, unconfirmed
         if newest then
             d.where = ns.Signature.where(ns.Signature.lines(type(newest.stack) == "string" and newest.stack or nil))
             d.tier, d.entry = newest.tier, newest.entry
