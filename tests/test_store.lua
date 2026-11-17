@@ -236,6 +236,12 @@ for i = 1, 8 do S4.record({ kind = "error", tier = "full", message = "capped " .
 eq(#S4.List("all", true), 5, "at most 5 new problems this session")
 eq(S4.db().stats.newCapped, 3, "the rest counted as capped")
 S4.record({ kind = "error", tier = "full", message = "capped 1", stack = plain, at = WoW.clock })
-eq(S4.List("all", true)[1].count + 0 >= 1, true, "an existing problem still counts past the cap")
+-- Exactly +1 (the pause probe's marker relies on it, Codex PR #17): a repeat past the cap
+-- is counted on its problem, not refused as a new one.
+local function countOf(msg)
+    for _, p in ipairs(S4.List("all", true)) do if p.title == msg then return p.count + 0 end end
+end
+eq(countOf("capped 1"), 2, "an existing problem still counts past the cap")
+eq(S4.db().stats.newCapped, 3, "and the repeat is not counted as capped")
 
 done("test_store")

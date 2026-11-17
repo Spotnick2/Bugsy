@@ -864,6 +864,11 @@ local function received(match)
     return (d.count or 0) + (d.unconfirmed or 0)
 end
 
+-- Both marker errors come from this one line (Codex, PR #17): the grouping signature reads
+-- the stack, so a seed and a later marker raised at different lines would be two problems,
+-- and the later one, a new problem, would be dropped at the new-problem cap.
+local function markerRaiser(marker) return function() error(marker, 0) end end
+
 -- Before each burst: this run's marker, recorded as a problem first.
 local function burstPrepare(label)
     BugsyProbeDB.pause = BugsyProbeDB.pause or {}
@@ -872,7 +877,7 @@ local function burstPrepare(label)
     local id = ("%.0f"):format(GetTime() * 1000)
     local marker = "BugsyProbe pause marker " .. label .. " r" .. id
     BugsyProbeDB.pauseRun[label] = { id = id, marker = marker }
-    C_Timer.After(0, function() error(marker, 0) end)
+    C_Timer.After(0, markerRaiser(marker))
     return true, "marker " .. id
 end
 
@@ -885,7 +890,7 @@ local function burstFire(label, n)
     for i = 1, n do
         C_Timer.After(0, function() error("BugsyProbe pause burst " .. label .. " r" .. run.id .. " #" .. i, 0) end)
     end
-    C_Timer.After(1, function() error(marker, 0) end)
+    C_Timer.After(1, markerRaiser(marker))
     C_Timer.After(2.5, function()
         local d = diag()
         local p = d.pause and d.pause.pause or {}
@@ -905,7 +910,7 @@ local function burstDone(label)
 end
 
 Probe:Steps("pause", {
-    title = "The client's error-reporting pause (P8, #14)", rev = 2,
+    title = "The client's error-reporting pause (P8, #14)", rev = 3,
     { text = "From a fresh /reload. Recording this run's marker.", auto = true, run = function() return burstPrepare("99") end },
     { text = "Press Run: 99 errors in one frame, then the marker 1 s later.", run = function() return burstFire("99", 99) end },
     { text = "Waiting (about 3 s).", wait = burstDone("99"), timeout = 20 },
