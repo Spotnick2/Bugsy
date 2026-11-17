@@ -364,7 +364,9 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
   chat notices on/off.
 - **Notifications**: one chat line per problem **on its first occurrence this session** (a bug
   from last week coming back today is announced, as the usual viewer does), at most one line every 10 s,
-  held until combat ends; no sound by default; never opens a window in combat. The minimap's addon
+  held until combat ends, with an alert sound (the owner's pick, FileDataID 550736 on the Master
+  channel; `/bugsy sound on|off`, on by default; it follows the notice's throttle and combat hold,
+  and plays even with chat notices off); never opens a window in combat. The minimap's addon
   compartment opens the window.
 - **Report flow**: (1) what were you doing, what happened, what did you expect, and "I didn't
   notice a visible problem"; (2) a preview of everything included, with the privacy note; (3) where

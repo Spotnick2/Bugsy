@@ -17,6 +17,7 @@ local function resetBugsy()
     WoW.stack = "[Interface/AddOns/TestAddon/Core.lua]:10: in function <Interface/AddOns/TestAddon/Core.lua:5>\n[C]: ?"
     WoW.locals = "self = <table>\nx = 1"
     WoW.errorHeight = 3
+    WoW.sounds = {}
     WoW.callHeight = 10
     WoW.stackCalls = {}
     WoW.instance = "none"
@@ -67,6 +68,8 @@ function seterrorhandler(fn) WoW.handler = fn end
 function geterrorhandler() return WoW.handler end
 function GetCallstackHeight() return WoW.callHeight end
 function GetErrorCallstackHeight() return WoW.errorHeight end
+-- Sounds played, in order: { id, channel }.
+function PlaySoundFile(id, channel) WoW.sounds[#WoW.sounds + 1] = { id, channel }; return true, 1 end
 function debugstack(level, top, bottom)
     table.insert(WoW.stackCalls, { level = level, top = top, bottom = bottom })
     local s = WoW.stack
