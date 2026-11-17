@@ -169,6 +169,8 @@ function Store.adopt(saved)
     saved.settings.locals = saved.settings.locals == true
     saved.settings.notices = saved.settings.notices ~= false
     saved.settings.sound = saved.settings.sound ~= false
+    -- the chosen alert sound's FileDataID (#19); Bugsy.lua maps an unknown one to the default
+    if type(saved.settings.soundId) ~= "number" then saved.settings.soundId = nil end
     saved.settings.front = saved.settings.front ~= false
 
     local problems = type(saved.problems) == "table" and saved.problems or {}
