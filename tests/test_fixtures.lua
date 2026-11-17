@@ -49,4 +49,34 @@ local _, gDirect = Sig.compute("error", P .. ":183: boom", frame(183, 183) .. "\
 local _, gWrapped = Sig.compute("error", P .. ":183: boom", FIXTURES.wrapper.stack)
 eq(gDirect, gWrapped, "the wrapper's extra C frame does not split the problem")
 
+-- Real messages from `secrets` (P1, combat, build 70959): readable strings, not secrets.
+local Patterns = ns.Patterns
+local SECRET_BOOL = P .. ":233: attempt to perform boolean test on local 'x' (a secret boolean value, while execution tainted by 'BugsyProbe')"
+local AURA = "GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'BugsyProbe'\nLua Taint: BugsyProbe"
+local function ids(o)
+    local out = {}
+    for _, m in ipairs(Patterns.match(o, 70959)) do out[m.id] = m end
+    return out
+end
+local sb = ids({ kind = "error", message = SECRET_BOOL, stack = frame(233, 226) .. "\n", inCombat = true })
+check(sb["secret-touch"], "the 'while execution tainted' wording matches secret-touch")
+check(sb["secret-touch"] and table.concat(sb["secret-touch"].evidence, "; "):find("boolean test", 1, true),
+    "and quotes the operation in its evidence")
+local au = ids({ kind = "error", message = AURA, stack = frame(244, 226) .. "\n", inCombat = true })
+check(au["aura-secret"], "the aura message matches aura-secret")
+eq(Attr.attribute({ kind = "error", message = SECRET_BOOL, stack = frame(233, 226) .. "\n" }).named.addon,
+    "BugsyProbe", "the client names the tainting addon")
+eq(Attr.attribute({ kind = "error", message = AURA, stack = frame(244, 226) .. "\n" }).named.addon,
+    "BugsyProbe", "in the aura message too")
+local _, title = nil, nil
+ns.Store.record({ kind = "error", tier = "full", provider = "native", stackOrigin = "error", message = AURA,
+    stack = frame(244, 226) .. "\n", at = WoW.clock, key = Sig.messageKey("error", AURA) })
+for _, p in ipairs(ns.Store.List("all", true)) do if p.title:find("GetAuraDataByIndex", 1, true) then title = p.title end end
+eq(title, "GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'BugsyProbe'",
+    "the title is the first line, without the 'Lua Taint:' line")
+-- error() given a secret table arrives as the string "UNKNOWN ERROR": one problem per location.
+local _, gU1 = Sig.compute("error", "UNKNOWN ERROR", frame(239, 226) .. "\n")
+local _, gU2 = Sig.compute("error", "UNKNOWN ERROR", frame(300, 226) .. "\n")
+check(gU1 ~= gU2, "UNKNOWN ERROR from two places stays two problems")
+
 done("test_fixtures")
