@@ -9,6 +9,10 @@ ns.Bugsy = Bugsy
 _G.Bugsy = Bugsy          -- the one global: the slash command, the compartment, a later library bridge
 
 Bugsy.NOTICE_EVERY = 10   -- seconds between chat notices
+-- The alert sound for a new problem (the owner's pick): a FileDataID, played on the
+-- Master channel. FileDataIDs play on Forever; built-in file paths are refused
+-- (References\Docs\PORTING-TBC-TO-FOREVER.md, PlaySoundFile).
+Bugsy.SOUND, Bugsy.SOUND_CHANNEL = 550736, "Master"
 
 local function say(msg)
     local f = G("DEFAULT_CHAT_FRAME")
@@ -19,12 +23,19 @@ local function say(msg)
 end
 Bugsy.say = say
 
--- Notices: one line per new problem, at most one every NOTICE_EVERY seconds, held in combat.
+local function alertSound(db)
+    if not db.settings.sound then return end
+    local play = G("PlaySoundFile")
+    if play then pcall(play, Bugsy.SOUND, Bugsy.SOUND_CHANNEL) end
+end
+
+-- Notices: one line and one sound per new problem, at most one every NOTICE_EVERY
+-- seconds, held in combat. The chat line and the sound have their own settings.
 local pendingNew, lastNotice = 0, -1e9
 local function flushNotices()
     if pendingNew == 0 or API.InCombat() then return end
     local db = Store.db()
-    if not (db and db.settings.notices) then pendingNew = 0; return end
+    if not (db and (db.settings.notices or db.settings.sound)) then pendingNew = 0; return end
     local now = API.Uptime()
     if now - lastNotice < Bugsy.NOTICE_EVERY then
         API.After(Bugsy.NOTICE_EVERY - (now - lastNotice), flushNotices)
@@ -33,8 +44,11 @@ local function flushNotices()
     lastNotice = now
     local n = pendingNew
     pendingNew = 0
-    say(n == 1 and "caught a new problem. Type /bugsy to see it."
-        or (n .. " new problems. Type /bugsy to see them."))
+    if db.settings.notices then
+        say(n == 1 and "caught a new problem. Type /bugsy to see it."
+            or (n .. " new problems. Type /bugsy to see them."))
+    end
+    alertSound(db)
 end
 Bugsy.flushNotices = flushNotices
 
@@ -132,6 +146,7 @@ local HELP = {
     "/bugsy report - report a problem that showed no error",
     "/bugsy locals on|off - capture local variables with errors (may contain names; off by default)",
     "/bugsy notices on|off - a chat line when a new problem is caught",
+    "/bugsy sound on|off - a sound when a new problem is caught",
     "/bugsy status - how Bugsy is catching errors",
     "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
 }
@@ -149,6 +164,10 @@ function Bugsy.Slash(msg)
     elseif cmd == "notices" then
         local on = setting("notices", arg)
         say("chat notices are " .. (on and "on." or "off."))
+    elseif cmd == "sound" then
+        local on = setting("sound", arg)
+        say("the sound for a new problem is " .. (on and "on." or "off."))
+        if on and arg == "on" then alertSound(Store.db()) end
     elseif cmd == "front" then
         local on = setting("front", arg)
         say("catching errors ahead of another addon's handler is " .. ((on ~= false) and "on" or "off")

@@ -16,6 +16,32 @@ WoW.combat = false
 WoW.fire("PLAYER_REGEN_ENABLED")
 check(chatHas("caught a new problem"), "the notice comes after combat")
 
+-- The alert sound: with the notice, the owner's FileDataID on Master, held in combat,
+-- throttled with the notice, its own setting.
+eq(#WoW.sounds, 1, "one sound with the notice, after combat (none during)")
+eq(WoW.sounds[1] and WoW.sounds[1][1], 550736, "the chosen sound")
+eq(WoW.sounds[1] and WoW.sounds[1][2], "Master", "on the Master channel")
+WoW.raise("another new problem, within the throttle")
+drain()
+eq(#WoW.sounds, 1, "no second sound inside the 10 s throttle")
+ns.Bugsy.Slash("sound off")
+eq(BugsyDB.settings.sound, false, "the setting is saved")
+WoW.sounds = {}
+WoW.advance(11)
+WoW.raise("a third new problem")
+drain()
+eq(#WoW.sounds, 0, "no sound when off")
+ns.Bugsy.Slash("sound on")
+eq(#WoW.sounds, 1, "turning it on plays it once, as a sample")
+ns.Bugsy.Slash("notices off")
+WoW.sounds, WoW.lines = {}, {}
+WoW.advance(11)
+WoW.raise("a fourth new problem")
+drain()
+eq(#WoW.sounds, 1, "the sound plays with chat notices off")
+check(not chatHas("caught"), "and no chat line")
+ns.Bugsy.Slash("notices on")
+
 -- A known problem's first occurrence in a new session is announced again.
 WoW.reset()
 local saved
@@ -98,6 +124,7 @@ check(rf.preview._text:find("The tab is empty", 1, true), "the manual report pre
 Bugsy_OnAddonCompartmentClick()
 SlashCmdList.BUGSY("help")
 check(chatHas("/bugsy report"), "help lists the commands")
+check(chatHas("/bugsy sound"), "including the sound setting")
 
 local recorded = Kit.checkMethods({})
 check(recorded >= 40, "the exercise reached the windows (" .. recorded .. " recorded)")

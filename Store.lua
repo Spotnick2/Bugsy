@@ -168,6 +168,7 @@ function Store.adopt(saved)
     if type(saved.settings) ~= "table" then saved.settings = {} end
     saved.settings.locals = saved.settings.locals == true
     saved.settings.notices = saved.settings.notices ~= false
+    saved.settings.sound = saved.settings.sound ~= false
     saved.settings.front = saved.settings.front ~= false
 
     local problems = type(saved.problems) == "table" and saved.problems or {}
