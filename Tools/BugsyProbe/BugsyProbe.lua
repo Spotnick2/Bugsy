@@ -615,7 +615,12 @@ local function bugsyMemoryKB()
 end
 
 local function floodBugsy(label, n, unique, spread)
-    local match = unique and ("BugsyProbe flood unique " .. label) or ("BugsyProbe flood same " .. label)
+    -- this run's result only: a saved one from an earlier run must not satisfy the wait
+    -- (Codex, PR #12), and the run's own id keeps its errors apart from earlier runs'
+    BugsyProbeDB.floods3 = BugsyProbeDB.floods3 or {}
+    BugsyProbeDB.floods3[label] = nil
+    local run = ("%.0f"):format(GetTime() * 1000)
+    local match = (unique and "BugsyProbe flood unique " or "BugsyProbe flood same ") .. label .. " r" .. run
     local got0, lost0 = bugsyTotals(match)
     local paused0 = bugsyTotals("Error reporting is now paused")
     local mem0 = bugsyMemoryKB()
@@ -654,7 +659,7 @@ local function floodDone(label)
 end
 
 Probe:Steps("floods", {
-    title = "Floods (P8): what Bugsy receives, the client's pause, frame time", rev = 3,
+    title = "Floods (P8): what Bugsy receives, the client's pause, frame time", rev = 4,
     { text = "Errors go to Bugsy. Start from a fresh /reload. Press Run: 1000 identical errors in one frame.",
       run = function() return floodBugsy("same-frame", 1000, false, nil) end },
     { text = "Waiting (about 3 s).", wait = floodDone("same-frame"), timeout = 30 },
