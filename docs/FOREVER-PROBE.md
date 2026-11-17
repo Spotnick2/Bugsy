@@ -411,3 +411,28 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   the probe's note intact, line breaks aside: that note box is single-line). The probe's own
   byte comparison failed again for a probe reason (the step finished on Run, before the paste);
   rev 3 waits for the owner.
+
+### `floods` rev 3 and `copy` rev 3: build 70959, 2026-11-17
+
+**P8** (Bugsy in front of the wrapper addon; a reload before each burst):
+
+| Flood | Bugsy received | Client pause | Longest frame | `!Bugsy` memory |
+|---|---|---|---|---|
+| 1 000 identical, one frame | 100 | yes, after 100 | 33 ms | 493 → 901 KB |
+| 1 000 different, one frame | 100 | yes, after 100 | 38 ms | 512 → 1 157 KB |
+| 1 000 different, over 4 s | 150 new problems, 850 counted | no | 40 ms | 1 069 → 5 809 KB |
+
+- **[game, 70959]** The pause after 100 errors in one frame is repeatable; 1 000 errors over 4 s
+  (about 250 a second) did not trigger it.
+- **[game, 70959]** A spread unique flood is bounded by Bugsy's per-session cap (150 new problems,
+  D13): the rest are counted, nothing older is evicted. No freeze in any run (owner).
+- `GetAddOnMemoryUsage` includes garbage not yet collected, so these are upper bounds. Bugsy's
+  share of the session's 0.4-0.5 GB of addon memory is small.
+
+**P12** (the owner pasted into the step's note; it escapes `|` as `||` when shown):
+- **[game, 70959]** The line with every `|` doubled (as Bugsy displays text) copies back to the
+  **original** text exactly: `|` sequences, the colour code and UTF-8 (`é漢字`) intact.
+- **[game, 70959]** The raw line copies what is **rendered**: the colour code became plain text
+  "red" and `||` became `|`. So the doubling Bugsy does for display is required for a faithful copy.
+- A tab came back as four spaces in the note; whether the clipboard or the note box converted it
+  is not known.

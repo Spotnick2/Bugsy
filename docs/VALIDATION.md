@@ -3,7 +3,7 @@
 State of the first vertical slice (2026-11-17, build 70959). Two kinds of evidence, never mixed:
 **automated** checks run offline against WowTestKit's mock (pinned commit `38fb0fc`, build data
 70959), and **in-game** checks, which are the only proof of taint, stack levels, secrets and client
-behaviour. In game, `stacks`, `secrets`, `combat`, `front`, `frontown`, `early`, `throw`, `coexist` and `popups` have run; `floods` and `copy` in part (build 70959, results in FOREVER-PROBE §7); the rest have not.
+behaviour. In game, `stacks`, `secrets`, `combat`, `front`, `frontown`, `early`, `throw`, `coexist`, `popups`, `floods` and `copy` have run: every procedure (build 70959, results in FOREVER-PROBE §7); the rest have not.
 
 ## Automated (`pwsh tests\run.ps1`: 8 files, all passing)
 
@@ -43,13 +43,13 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | `secrets` | **Done, 70959.** P1: three tainted errors in combat; message, stack and locals all readable, the two checks agree; new secret-boolean wording matched; a table error arrives as `UNKNOWN ERROR`. A secret *message* was not produced: those markers stay unmeasured | yes |
 | `combat` | **Done, 70959.** P6: the handler in combat writes its tables and its timer runs; no blocked action. taintLog was off: taint lines are left to `frontown` | yes |
 | `early` | **Done, 70959.** P5: saved table readable at file scope; a load-time timer runs after `ADDON_LOADED`; a main-chunk error has error height 0, which emptied the stack (fixed: counts as 1). It also exposed, and the fixed probe no longer has, a client hang | yes |
-| `floods` | **In part, 70959.** The client pauses error reporting after a burst (100 in one frame), until `/reload`; Bugsy received the 100 and the pause notice; no freeze. Rev 3 (a reload per burst, Bugsy's memory) to finish | yes |
+| `floods` | **Done, 70959.** The client pauses error reporting after 100 errors in one frame, until `/reload` (#14); a spread flood is bounded by the 150 new-problem cap; longest frame 40 ms, no freeze; `!Bugsy` memory a few MB at most | yes |
 | `throw` | **Done, 70959.** P9: a throwing handler becomes a Lua Warning (Blizzard's window, `LUA_WARNING`); no recursion; capture continues | yes |
 | `front` | **Done, 70959: passed.** P7: Bugsy in front of the installed wrapper records its kept errors, locals and a direct report, and keeps capturing after the wrapper's measured cutoff (1 000) | yes |
 | `frontown` | **Done, 70959: passed.** P6, P7: front installed in combat, no taint or blocked action; downstream formula levels hold; a report while passing dropped and counted; a throwing wrapper counted; a later wrapper keeps the chain | yes |
 | `coexist` | **Done, 70959.** P7: with the collector, collector mode and errors through it; without it, the embedding addon wraps the handler and Bugsy goes front | yes |
 | `popups` | **Done, 70959.** P4: the forbidden function is named (`TargetUnit()`); P10: with Blizzard's listeners unregistered, no popup. Taint of doing so not yet checked (B-18) | owner's decision |
-| `copy` | **In part, 70959.** P12: 63 KB identical; Bugsy's Copy details copies. The probe's byte comparison still to run (rev 3) | Copy details part |
+| `copy` | **Done, 70959.** P12: Bugsy's doubled-pipe display copies back to the original exactly (`|`, colour codes, UTF-8); raw text copies what is rendered; 63 KB identical. A tab's fate is unknown | Copy details part |
 | (passive) | P3: `LUA_WARNING` over a play session (`/fp bugsy warnings`) | payloads only |
 
 Plus the save/reload check of the release gate (BACKLOG): evidence, mute and clear state, session
