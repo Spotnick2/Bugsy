@@ -348,3 +348,34 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   Blizzard's own handler has the same formula, so its window likely shows an empty stack there.
 - Not measured here: an error from an addon loading **before** `!Bugsy` (P5's boundary: such an
   error cannot be captured by a handler not yet installed).
+
+### `throw`, `popups`, `copy`, `floods`, `coexist`: build 70959, 2026-11-17 (first runs)
+
+- **[game, 70959] P9: a handler that throws** is neither re-entered nor silently swallowed: the
+  client shows its error in Blizzard's own **Lua Warning** window (with Reload UI) and fires
+  `LUA_WARNING`, which Bugsy's event frame recorded as a warning problem. The next error was
+  captured normally. Bugsy's own handler never throws (everything under `pcall`), so this is the
+  fallback that would show a Bugsy defect, not a path Bugsy relies on.
+- **[game, 70959] P4, in part:** `TargetUnit(name, true)` from an addon raised
+  `ADDON_ACTION_FORBIDDEN` with the function **named** (`TargetUnit()`), not `UNKNOWN()` as the
+  porting guide recorded for 69977, and Blizzard's popup *"<addon> has been blocked from an
+  action only available to the Blizzard UI"* with Disable / Ignore. The second half (does the popup
+  come back once Blizzard's listeners are unregistered, P10) is inconclusive: the first popup was
+  still open. The procedure (rev 2) now says to press Ignore first.
+- **[game, 70959] P12, in part:** 64 575 bytes set in an edit box read back identical, in 0.8 ms.
+  The Ctrl+C half failed for a reason in the probe, not the client: the box lost keyboard focus
+  when the probe's step panel advanced, so Ctrl+C reached the game's key binding (the character
+  window opened). The owner's GlassChat copy window (SetFocus + HighlightText on show, nothing
+  stealing focus after) copies fine, and Bugsy's Copy details and report preview do the same.
+  Rev 2 has a Select button clicked right before Ctrl+C, a paste box compared byte for byte, and
+  a check of Bugsy's own Copy details.
+- **P8, inconclusive:** the first procedure sent its floods to the probe's measuring handler, not
+  Bugsy. Of 1 000 errors raised from timers in **one frame**, 101 reached that handler, and 0 of
+  the next 1 000; the game did not freeze (owner). By contrast, the `front` run's 1 100 errors
+  spread over 2 s all reached Bugsy (173 sampled, 927 counted). So the client may cap how many
+  errors from one frame reach a handler. Rev 2 sends floods to Bugsy and compares one frame with
+  spread, recording the longest frame. Lua memory was about 440 MB in that session (all addons):
+  noted, not yet explained.
+- **P7: not run.** Neither the standalone collector nor the addon that embeds a copy was enabled
+  (the owner had disabled them), so Bugsy ran natively both times. Rev 3 checks the collector is
+  loaded before it goes on.

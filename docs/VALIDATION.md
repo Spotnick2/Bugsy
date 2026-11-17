@@ -43,13 +43,13 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | `secrets` | **Done, 70959.** P1: three tainted errors in combat; message, stack and locals all readable, the two checks agree; new secret-boolean wording matched; a table error arrives as `UNKNOWN ERROR`. A secret *message* was not produced: those markers stay unmeasured | yes |
 | `combat` | **Done, 70959.** P6: the handler in combat writes its tables and its timer runs; no blocked action. taintLog was off: taint lines are left to `frontown` | yes |
 | `early` | **Done, 70959.** P5: saved table readable at file scope; a load-time timer runs after `ADDON_LOADED`; a main-chunk error has error height 0, which emptied the stack (fixed: counts as 1). It also exposed, and the fixed probe no longer has, a client hang | yes |
-| `floods` | P8: 1 000 identical and 1 000 unique errors. Run it with any addon that wraps the error handler disabled (one stops passing errors on after a flood, §7), unless measuring that | yes |
-| `throw` | P9: a handler that throws | yes |
+| `floods` | **Rerun (rev 2).** First run measured the probe's handler, not Bugsy: 101 of 1 000 one-frame errors reached it, then 0. Rev 2 floods Bugsy, one frame vs spread, longest frame | yes |
+| `throw` | **Done, 70959.** P9: a throwing handler becomes a Lua Warning (Blizzard's window, `LUA_WARNING`); no recursion; capture continues | yes |
 | `front` | **Done, 70959: passed.** P7: Bugsy in front of the installed wrapper records its kept errors, locals and a direct report, and keeps capturing after the wrapper's measured cutoff (1 000) | yes |
 | `frontown` | **Done, 70959: passed.** P6, P7: front installed in combat, no taint or blocked action; downstream formula levels hold; a report while passing dropped and counted; a throwing wrapper counted; a later wrapper keeps the chain | yes |
-| `coexist` | P7: with the standalone collector, without, with a copy embedded in another addon | yes |
-| `popups` | P4, P10: forbidden-action payloads, Blizzard's popup | owner's decision |
-| `copy` | P12: Ctrl+C fidelity of `|`, tabs, UTF-8; 63 KB in an edit box | Copy details part |
+| `coexist` | **Rerun (rev 3).** P7: not run yet (the collector and the embedding addon were disabled). Rev 3 checks the collector is loaded first | yes |
+| `popups` | **Rerun (rev 2) for P10.** P4: the forbidden function is named (`TargetUnit()`); Blizzard's popup shown. P10 inconclusive (first popup still open) | owner's decision |
+| `copy` | **Rerun (rev 2).** P12: 63 KB identical; Ctrl+C failed only because the probe's panel took focus. Rev 2: Select button, byte comparison, Bugsy's Copy details | Copy details part |
 | (passive) | P3: `LUA_WARNING` over a play session (`/fp bugsy warnings`) | payloads only |
 
 Plus the save/reload check of the release gate (BACKLOG): evidence, mute and clear state, session

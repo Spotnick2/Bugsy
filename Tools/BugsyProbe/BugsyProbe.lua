@@ -368,26 +368,66 @@ Probe:RegisterEvents(warnFrame, { "LUA_WARNING" })
 -- P12: copy fidelity and large text.
 local SAMPLE = "pipe|single ||double |cffff0000red|r tab\there é漢字 end"
 local copyBox
-local function showCopyBox()
+local function showCopyBox(keepPaste)
     if not copyBox then
         local f = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
-        f:SetSize(520, 120)
+        f:SetSize(560, 220)
         f:SetPoint("CENTER", 0, 150)
+        f:SetFrameStrata("DIALOG")
         local e = CreateFrame("EditBox", nil, f)
         e:SetMultiLine(true)
         e:SetAutoFocus(false)
         e:SetFontObject("ChatFontNormal")
-        e:SetWidth(480)
+        e:SetWidth(520)
         e:SetPoint("TOPLEFT", 16, -30)
+        e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         f.edit = e
+        local p = CreateFrame("EditBox", nil, f)
+        p:SetMultiLine(true)
+        p:SetAutoFocus(false)
+        p:SetFontObject("ChatFontNormal")
+        p:SetSize(440, 60)
+        p:SetPoint("BOTTOMLEFT", 22, 16)
+        p:SetMaxLetters(0)
+        local bg = p:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.5)
+        p:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        f.paste = p
+        local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        b:SetSize(80, 22)
+        b:SetPoint("BOTTOMRIGHT", -14, 16)
+        b:SetText("Select")
+        -- what a player does: click, then Ctrl+C at once (the box keeps focus)
+        b:SetScript("OnClick", function() f.edit:SetFocus(); f.edit:HighlightText() end)
+        f.select = b
         copyBox = f
     end
     copyBox.edit:SetText(SAMPLE .. "\n" .. SAMPLE:gsub("|", "||"))
+    if not keepPaste then copyBox.paste:SetText("") end
     copyBox:Show()
-    copyBox.edit:SetFocus()
-    copyBox.edit:HighlightText()
     BugsyProbeDB.copySample = { raw = SAMPLE, escaped = (SAMPLE:gsub("|", "||")) }
     return true, "shown: line 1 raw, line 2 with pipes doubled"
+end
+
+-- What came back through the clipboard, against what the box holds.
+local function comparePaste()
+    if not copyBox then return false, "the window was not opened" end
+    local shown, got = copyBox.edit:GetText(), copyBox.paste:GetText()
+    local r = { shownLength = #shown, pastedLength = #got, equal = shown == got }
+    if not r.equal then
+        local i = 1
+        while i <= #shown and i <= #got and shown:byte(i) == got:byte(i) do i = i + 1 end
+        r.firstDiff = i
+        r.shownAt = shown:sub(i, i + 20)
+        r.pastedAt = got:sub(i, i + 20)
+    end
+    r.detail = r.equal and "identical" or ("%d vs %d bytes; first difference at byte %s: shown %q, pasted %q")
+        :format(#shown, #got, tostring(r.firstDiff), tostring(r.shownAt), tostring(r.pastedAt))
+    r.pasted = got:sub(1, 300)
+    BugsyProbeDB.copyResult = r
+    say("copy: " .. r.detail)
+    return r.equal, r.detail
 end
 local function bigText()
     if not copyBox then showCopyBox() end
@@ -557,13 +597,64 @@ Probe:Steps("combat", {
     { text = "Leave combat. Check /fp for an ADDON_ACTION_BLOCKED line from the host after the error. Any?", ask = true },
 })
 
+-- Floods (P8), rev 2: errors go to BUGSY (no measuring handler). What it received
+-- (occurrences, counted repeats, suppressed), and the longest frame meanwhile.
+local function bugsyTotals(match)
+    local d = diag(match)
+    return (d.count or 0) + (d.unconfirmed or 0), (d.suppressed or 0) + (d.queueDropped or 0)
+end
+
+local function floodBugsy(label, n, unique, spread)
+    local match = unique and ("BugsyProbe flood unique " .. label) or ("BugsyProbe flood same " .. label)
+    local got0, lost0 = bugsyTotals(match)
+    local maxMs, frames, last = 0, 0, debugprofilestop()
+    local tracker = CreateFrame("Frame")
+    tracker:SetScript("OnUpdate", function()
+        local now = debugprofilestop()
+        local dt = now - last
+        last = now
+        frames = frames + 1
+        if dt > maxMs then maxMs = dt end
+    end)
+    for i = 1, n do
+        local text = unique and (match .. " #" .. i) or match
+        C_Timer.After(spread and (i * spread) or 0, function() error(text, 0) end)
+    end
+    C_Timer.After((spread and n * spread or 0) + 3, function()
+        tracker:SetScript("OnUpdate", nil)
+        local got1, lost1 = bugsyTotals(match)
+        local mem = -1
+        if collectgarbage then local ok, kb = pcall(collectgarbage, "count"); if ok then mem = kb end end
+        local r = { raised = n, received = got1 - got0, lost = lost1 - lost0, maxFrameMs = maxMs, frames = frames,
+            memoryKB = mem, mode = diag().mode }
+        BugsyProbeDB.floods2 = BugsyProbeDB.floods2 or {}
+        BugsyProbeDB.floods2[label] = r
+        say(("%s: %d raised; Bugsy received %d (+%d only counted as lost/suppressed); longest frame %.0f ms over %d frames; Lua memory %.0f KB; mode %s")
+            :format(label, n, r.received, r.lost, maxMs, frames, mem, tostring(r.mode)))
+    end)
+    return true, "scheduled"
+end
+
+local function floodDone(label)
+    return function()
+        local r = BugsyProbeDB.floods2 and BugsyProbeDB.floods2[label]
+        return r ~= nil, "running"
+    end
+end
+
 Probe:Steps("floods", {
-    title = "Floods (P8)", rev = 1,
-    { text = "1000 identical errors in one frame. The game may stutter. Press Run.", run = function() return flood("flood-same", 1000, false) end },
-    { text = "Waiting.", wait = function() return BugsyProbeDB.floods and BugsyProbeDB.floods["flood-same"], "running" end, timeout = 20 },
+    title = "Floods (P8): what Bugsy receives, and frame time", rev = 2,
+    { text = "Errors go to Bugsy itself this time. Press Run: 1000 identical errors, all in one frame.",
+      run = function() return floodBugsy("same-frame", 1000, false, nil) end },
+    { text = "Waiting (about 3 s).", wait = floodDone("same-frame"), timeout = 30 },
     { text = "Did the game freeze noticeably (more than half a second)?", ask = true },
-    { text = "1000 unique errors. Press Run.", run = function() return flood("flood-unique", 1000, true) end },
-    { text = "Waiting.", wait = function() return BugsyProbeDB.floods and BugsyProbeDB.floods["flood-unique"], "running" end, timeout = 20 },
+    { text = "Press Run: 1000 different errors, all in one frame.",
+      run = function() return floodBugsy("unique-frame", 1000, true, nil) end },
+    { text = "Waiting (about 3 s).", wait = floodDone("unique-frame"), timeout = 30 },
+    { text = "Did the game freeze noticeably?", ask = true },
+    { text = "Press Run: 1000 identical errors spread over 2 s.",
+      run = function() return floodBugsy("same-spread", 1000, false, 0.002) end },
+    { text = "Waiting (about 5 s).", wait = floodDone("same-spread"), timeout = 40 },
     { text = "Did the game freeze noticeably?", ask = true },
 })
 
@@ -595,33 +686,52 @@ Probe:Steps("early", {
 })
 
 Probe:Steps("coexist", {
-    title = "Living with another error collector (P7, P11)", rev = 2,
-    { text = "Is a standalone error collector enabled right now?", ask = true },
-    { text = "Recording who holds the handler.", auto = true, run = function() return handlerState("coexist-1") end },
-    { text = "In the AddOns list: disable the standalone error collector and its viewer. Keep any addon that embeds its own copy of one enabled. Then reload.", reload = true },
-    { text = "Recording who holds the handler now.", auto = true, run = function() return handlerState("coexist-2") end },
-    { text = "Press Run to raise an error, then open /bugsy: is it listed?", run = function()
-        C_Timer.After(0.1, function() error("BugsyProbe coexistence error") end); return true end },
-    { text = "Is the error listed in Bugsy's window?", ask = true },
-    { text = "Is an addon that embeds its own error collector installed and enabled?", ask = true },
+    title = "Living with another error collector (P7, P11)", rev = 3,
+    { text = "In the AddOns list, ENABLE the standalone error collector, its viewer, and the addon that embeds its own copy of one. Reload, then press Run to check Bugsy sees the collector.",
+      run = function()
+          local d = frontState("coexist-1"); handlerState("coexist-1")
+          return d.mode == "collector", tostring(d.mode) end,
+      check = function() local s = BugsyProbeDB.front["coexist-1"]
+          return s and s.mode == "collector", "Bugsy reads from the collector (if not: it is not loaded)" end },
+    { text = "Press Run: an error.", run = function() raiseLater("BugsyProbe coexist with the collector"); return true end },
+    { text = "Waiting for Bugsy to record it.", wait = waitRecorded("BugsyProbe coexist with the collector"), timeout = 15,
+      check = function() local d = recorded("BugsyProbe coexist with the collector", "coexist-collector")
+          return d.entry == "collector", "entry " .. tostring(d.entry) end },
+    { text = "In the AddOns list, DISABLE the standalone collector and its viewer; keep the addon that embeds a copy enabled. Then reload.", reload = true },
+    { text = "Recording who holds the handler now.", auto = true,
+      run = function() local d = frontState("coexist-2"); handlerState("coexist-2"); return true, tostring(d.mode) end },
+    { text = "Press Run: an error.", run = function() raiseLater("BugsyProbe coexist with the embedded copy"); return true end },
+    { text = "Waiting for Bugsy to record it.", wait = waitRecorded("BugsyProbe coexist with the embedded copy"), timeout = 15,
+      check = function() local d = recorded("BugsyProbe coexist with the embedded copy", "coexist-embedded")
+          return (d.count or 0) > 0, "entry " .. tostring(d.entry) .. ", mode " .. tostring(d.mode) end },
+    { text = "Did anything else show (a popup, a chat line from those addons)?", ask = true },
 })
 
 Probe:Steps("popups", {
-    title = "Blizzard's blocked-action popup (P4, P10)", rev = 1,
+    title = "Blizzard's blocked-action popup (P4, P10)", rev = 2,
     { text = "Press Run: one forbidden call (TargetUnit). A Blizzard popup may appear.", run = forbid, screenshot = "forbidden" },
-    { text = "Did a popup appear?", ask = true },
+    { text = "Did a popup appear? If one did, press its Ignore button to close it, then answer.", ask = true },
     { text = "Press Run: stop Blizzard's popup listeners for this session.", run = unregisterPopups },
     { text = "Press Run: the forbidden call again.", run = forbid, screenshot = "forbidden-unregistered" },
-    { text = "Did a popup appear this time?", ask = true },
+    { text = "Did a NEW popup appear this time?", ask = true },
     { text = "Check /fp for taint lines from the host. Any new ones after the second call?", ask = true },
     { text = "Reload to restore Blizzard's listeners.", reload = true },
 })
 
 Probe:Steps("copy", {
-    title = "Copying from an edit box (P12)", rev = 1,
-    { text = "A box shows two lines and selects them. Press Run.", run = showCopyBox, screenshot = "copybox" },
-    { text = "Press Ctrl+C, click into this Note box, Ctrl+V, then Enter. Then press Next.", },
+    title = "Copying from an edit box (P12)", rev = 2,
+    { text = "Press Run: a window opens with two boxes. Then click its Select button, press Ctrl+C at once, click into the lower box, press Ctrl+V. Then press Next.",
+      run = showCopyBox, screenshot = "copybox" },
+    { text = "Comparing what was pasted with what was shown.", auto = true, run = comparePaste,
+      check = function() local c = BugsyProbeDB.copyResult; return c and c.equal == true, c and c.detail or "nothing pasted" end },
     { text = "Setting 63 KB of text and reading it back.", auto = true, run = bigText },
+    { text = "Now Bugsy itself: open /bugsy, pick a problem, press Copy details, then Ctrl+C at once. Did it copy, or did a game window open (for example the character window)?", ask = true },
+    { text = "If it copied: paste it into the lower box of the probe's window (Press Run to reopen it), then Next.",
+      run = function() showCopyBox(true); return true end },
+    { text = "Recording the paste.", auto = true, run = function()
+          local t = copyBox and copyBox.paste:GetText() or ""
+          BugsyProbeDB.bugsyCopy = { length = #t, head = t:sub(1, 300), hasPipe = t:find("|", 1, true) ~= nil }
+          return #t > 0, ("%d bytes pasted"):format(#t) end },
 })
 
 -- Boot --------------------------------------------------------------------------------------
