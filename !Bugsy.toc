@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: Bugsy
+## Notes: Catches Lua errors, groups them into problems, and prepares a report you can give the addon's author.
+## Author: Spotnick
+## Version: @project-version@
+## SavedVariables: BugsyDB
+## LoadSavedVariablesFirst: 1
+## X-Curse-Project-ID: 1812842
+## X-License: MIT
+## X-Website: https://github.com/Spotnick2/Bugsy
+## Category: Development Tools
+## AddonCompartmentFunc: Bugsy_OnAddonCompartmentClick
+
+Compat.lua
+Json.lua
+Signature.lua
+Capture.lua
+Attribution.lua
+Patterns.lua
+Context.lua
+Store.lua
+Report.lua
+UI.lua
+ReportUI.lua
+Bugsy.lua

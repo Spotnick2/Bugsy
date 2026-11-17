@@ -1,0 +1,42 @@
+name: Package check
+
+# The MVP's checks: syntax and unit tests through WowTestKit at its pin. The
+# release jobs (package, GitHub Release, Wago) come from
+# References\Docs\release\package-check.yml (RELEASING.md §2) with the first tag.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1
+
+      - name: Syntax-check every Lua file
+        run: |
+          count=$(find . -name '*.lua' -not -path './.git/*' -not -path './Libs/*' | wc -l)
+          test "$count" -gt 0 || { echo "no Lua files found - the check would prove nothing"; exit 1; }
+          echo "checking $count files"
+          find . -name '*.lua' -not -path './.git/*' -not -path './Libs/*' -print0 | xargs -0 luac5.1 -p
+
+      - name: Fetch WowTestKit at its pin
+        run: |
+          bash tests/fetch_kit.sh "$RUNNER_TEMP/WowTestKit"
+          echo "WOWTESTKIT=$RUNNER_TEMP/WowTestKit" >> "$GITHUB_ENV"
+
+      - name: Unit tests
+        run: |
+          for f in tests/test_*.lua; do
+            echo "-- $f"
+            lua5.1 "$f" || exit 1
+          done

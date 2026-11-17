@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: BugsyProbe
+## Notes: Throwaway probe for Bugsy: how the Forever client hands errors to addons. A ForeverProbe module: /fp bugsy
+## Author: Spotnick
+## Version: dev
+## Dependencies: ForeverProbe
+## OptionalDeps: !Bugsy
+## SavedVariables: BugsyProbeDB
+## LoadSavedVariablesFirst: 1
+
+BugsyProbe.lua
+FileScope.lua
