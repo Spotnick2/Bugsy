@@ -1,0 +1,19 @@
+# Compiled Lua / syntax-check output
+luac.out
+
+# Per-machine Claude Code settings
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Packager output
+.release/
+*.zip
+
+# Python bytecode from Tools/
+__pycache__/
+
+# Embedded libraries: fetched by the packager (.pkgmeta externals), copied by Tools/deploy.ps1.
+Libs/
+
+# The CurseForge description: kept beside README.md, pasted into CurseForge by hand.
+README.curseforge.md
