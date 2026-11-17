@@ -49,7 +49,7 @@ One embedded library, `LibBugsy-1.0`, for authors (phase 2). Five layers, each w
 | Export | `Report.lua`, `Json.lua` | on demand | The canonical report, Markdown and JSON, redaction, size trimming. |
 
 The reporting engine never depends on LibGlass or GlassUI. Presentation uses Blizzard templates;
-a Glass skin (B-16) is applied after, under `pcall`, so a LibGlass error can still be reported.
+a Glass skin (B-21) is applied after, under `pcall`, so a LibGlass error can still be reported.
 
 ## 3. Capture
 
@@ -323,6 +323,40 @@ frame.
 A report shows the session counters as "this session, across all problems", never as the
 problem's own loss. Bugsy never stops capturing entirely and never claims it caught everything.
 
+**The client's pause (#14; Codex design review, three rounds).** Measured (FOREVER-PROBE §7): after
+100 errors in one frame the client calls the handler once more with *"Error reporting is now
+paused and will resume after reloading the UI."* and then calls no handler until `/reload`.
+Bugsy cannot see a pause directly, so it records **evidence**, never a verdict:
+- an **eligible delivery** is a call into our handler or front that passed the passing,
+  collector and busy guards with a readable numeric error height (0 included). Direct reports
+  (nil height), events, collector callbacks and pass-backs are not counted. It is counted before
+  any tier, queue or store decision, so saturation cannot hide it (`stats.deliveries`);
+- deliveries are grouped by **same timestamp** (`GetTime()` equal): a heuristic, not frame
+  identity (P14 is incomplete). At 100 in one bucket, `health.pause` records a **suspicion**
+  (`status = "suspected"`, `evidence = "burst"`, the capture session, `observedCalls`);
+- the exact English notice is an **optional hint** (D15): it sets `status = "reported"`
+  (`evidence = "message"` or `"both"`) and that one call is not stored as a problem. Any other
+  message, whatever its position (call 101 included), is captured normally; another locale only
+  loses the hint;
+- a delivery in a later timestamp counts in `deliveredAfter` (reporting did not fully stop);
+  silence never upgrades the suspicion; nothing ever makes Bugsy refuse a call.
+`/bugsy status`, reports (`capture.limits`, `capture.health`) and the window's status line say
+"may have paused" (or "received a message saying"), and that warnings and blocked-action events
+are captured separately. One health notice, held in combat and throttled with the others, no
+sound.
+
+**The front's circuit breaker (#11, D16).** In front mode the next handler runs inside Bugsy's
+call, so its time counts against `!Bugsy` (measured: 85 execution-limit warnings behind a runaway
+handler). Each pass-on is timed with a guarded profiler read (missing, throwing, secret,
+non-numeric, infinite or backwards readings count as `timingUnavailable`, never as fast or
+slow). One call of **50 ms**, or **100 ms** within a rolling second (10 stamped bins of 100 ms),
+latches `forward.suspended` for the UI session (`/reload` retries): Bugsy keeps capturing every
+delivery, stops calling the next handler, and counts `forward.skipped` (not a capture loss). The
+thresholds are provisional, not measured limits. It cannot bound the first slow call; a slow call
+that threw counts. A later wrapper that runs before our front is outside this timing. If a
+collector takes over later, collector mode follows the usual rules and the suspension stays
+recorded; Bugsy never resumes forwarding by itself.
+
 ## 7. Attribution and explanations
 
 Separate fields, never merged:
@@ -452,5 +486,6 @@ flushes SavedVariables (reload, logout).
 | D11 | A changed handler is "displaced" until liveness says "chained" | Fable review: chaining wrappers are common; displaced was a false alarm |
 | D12 | Signatures parse the first path per line, skip our own frames | Fable review: the measured line format names the definition line second |
 | D13 | Per-session cap of 150 new problems; stackless problems for flood heads | Fable review: a unique flood must neither erase old evidence nor lose its messages |
-| D14 | Front mode: once a session, Bugsy installs itself ahead of a wrapper and passes each error on (setting `front`, on by default). Replaces "Bugsy never re-takes the handler" | Owner, after the `stacks` run found a wrapper that keeps and cuts off errors; design agreed with Codex in three rounds |
+| D14 | Front mode: once a session, Bugsy installs itself ahead of a wrapper and passes each error on (setting `front`, on by default), unless a pass-on was measured slow (D16). Replaces "Bugsy never re-takes the handler" | Owner, after the `stacks` run found a wrapper that keeps and cuts off errors; design agreed with Codex in three rounds |
 | D15 | Correctness never depends on translated client text: events, API values and locale-independent prefixes only. English text is matched only where a miss degrades gracefully (an explanation not shown, a "named" attribution falling back to the stack) | Owner: Bugsy must work with every localized client |
+| D16 | The front's circuit breaker: a pass-on of 50 ms, or 100 ms within a second, suspends passing on until reload; capture continues. The client's pause is recorded as evidence ("may have paused"), never as "capture stopped" | Measured: the next handler's time counts against Bugsy; the client pauses reporting after a burst. Design agreed with Codex in three rounds (#11, #14) |

@@ -42,7 +42,16 @@ capture           { mode ("native" | "collector" | "displaced" | "chained" | "fr
                                 passSuppressed,   -- front: distinct reports dropped while passing on
                                 forwardFailed },  -- front: the next handler failed
                                                                      -- all problems together
-                    lifetime = { evicted } }
+                    lifetime = { evicted },
+                    health = { pause = { status ("suspected" | "reported"),   -- #14: evidence,
+                                         evidence ("burst" | "message" | "both"),   -- never a verdict
+                                         at, session,      -- the capture session it was seen in
+                                         observedCalls, deliveredAfter, noticeSeen } } | absent,
+                    forward = { suspended (bool), reason ("call" | "window"), at,  -- front mode (#11)
+                                elapsedMs, windowMs, thresholdMs,
+                                skipped,             -- errors not passed on (not a capture loss)
+                                timingUnavailable } | absent }
+                  -- the minimal report keeps capture = { mode, health, forward } as bounded scalars
 
 problem           { id, kind ("error" | "warning" | "blocked" | "forbidden" | "handled" | "manual"),
                     title, count, countIncomplete (bool: count is a lower bound),

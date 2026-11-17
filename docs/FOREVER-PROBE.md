@@ -436,3 +436,30 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   "red" and `||` became `|`. So the doubling Bugsy does for display is required for a faithful copy.
 - A tab came back as four spaces in the note; whether the clipboard or the note box converted it
   is not known.
+
+### `pause` and `frontslow` (#14, #11): build 70959, 2026-11-17
+
+**The pause** (each burst raised in one frame, a marker error 1 s later; Bugsy natively):
+
+| Burst | Delivered to Bugsy | Marker | Bugsy's observation |
+|---|---|---|---|
+| 99 | 99 + marker | delivered | none |
+| 99 again, 5 s later, same session | 99 + marker | delivered (not stored: Bugsy's 150 new-problem cap was full, a probe flaw) | none |
+| 100 (fresh reload) | 100 | **not delivered** | suspected, burst, 100 calls |
+| 101 (fresh reload) | 100 (the 101st not delivered) | **not delivered** | suspected, burst, 100 calls |
+
+- **[game, 70959]** The client pauses reporting **at the 100th error in one frame**: nothing after
+  it is delivered, the next frame's marker included. Two bursts of 99 a few seconds apart do not
+  trigger it: the count is per burst, not cumulative.
+- **[game, 70959]** The notice *"Error reporting is now paused..."* was **not** sent with 100 or
+  101 errors; it came with 1 000 (`floods`). So it cannot be relied on; the burst count is the
+  signal, and Bugsy's `BURST_LIMIT = 100` matches the client's exactly.
+- **[game, 70959]** A forbidden call after the pause was still recorded (events are separate).
+
+**The breaker** (the wrapper addon disabled, a probe wrapper behind Bugsy with a fixed cost):
+- **[game, 70959]** Three 20 ms pass-ons 0.5 s apart: not suspended.
+- **[game, 70959]** One 60 ms pass-on: suspended at once (`reason = "call"`, 60.0 ms measured); the
+  next error captured, not passed on (`skipped = 1`).
+- **[game, 70959]** In combat, 15 ms pass-ons 0.05 s apart: suspended on the 7th (`reason =
+  "window"`, 105 ms in the window), the 3 after captured and skipped. No hitch, no blocked action
+  (owner).

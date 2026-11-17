@@ -5,7 +5,7 @@ State of the first vertical slice (2026-11-17, build 70959). Two kinds of eviden
 70959), and **in-game** checks, which are the only proof of taint, stack levels, secrets and client
 behaviour. In game, `stacks`, `secrets`, `combat`, `front`, `frontown`, `early`, `throw`, `coexist`, `popups`, `floods` and `copy` have run: every procedure (build 70959, results in FOREVER-PROBE §7); the rest have not.
 
-## Automated (`pwsh tests\run.ps1`: 8 files, all passing)
+## Automated (`pwsh tests\run.ps1`: 9 files, all passing)
 
 | File | What it proves | Count |
 |---|---|---|
@@ -16,6 +16,7 @@ behaviour. In game, `stacks`, `secrets`, `combat`, `front`, `frontown`, `early`,
 | `test_report.lua` | JSON parsed by a strict RFC 8259 parser; control characters, `|` and invalid UTF-8; the player's name and realm replaced in values **and keys** (collision suffix); trimming a far-oversized report under 64 KB in the documented order; the minimal report when nothing else fits; a manual report; **no string in the addon claims a report was sent or submitted**; `docs/examples/` current; empty schema lists encoded as `[]`, maps as `{}`; each Markdown occurrence names the versions it was captured with, the installed ones labelled apart (an upgrade after capture) | 967 |
 | `test_fixtures.lua` | The real stacks from `stacks` (P13): each one's first location, attribution to the probe alone, a key-binding chunk and C frames not locations, the measured `[tail call]` spelling, and one problem whether an error arrives directly or through a tail-calling wrapper; the real `secrets` messages (secret-boolean wording, the aura error) matched by their patterns and attribution, the aura title without its `Lua Taint:` line, `UNKNOWN ERROR` grouped per location | 32 |
 | `test_front.lua` | Front mode (D14), the Codex design review's cases: Bugsy goes in front of a wrapper installed after it, records the transition as its own, records each error once and passes it on once (tail and non-tail, arguments with trailing nils), records errors the wrapper keeps or stops passing on; a failed capture still passes on; a throwing wrapper is counted and the guards clear; reports made while passing are dropped and counted; a deferred pass-on is recorded twice (documented); a no-op setter, a setter that installs then throws, one that throws first; exactly one attempt; a later wrapper saving the front keeps the chain; a collector after the front: neither entry point records or leaves collector mode, the front still passes on; a nil-height direct call changes no mode, now or at the next check; the setting read once a session; status, limits, `/bugsy status`, Diagnostics | 75 |
+| `test_health.lua` | #14 and #11 (D16), the Codex design review's cases: 99/100/101 deliveries in one timestamp; call 101 captured normally; silence never certainty; `deliveredAfter`; the exact notice as a hint (not a problem), a translated, spoofed or secret one classifying nothing; direct reports, height 0 and events; detection with no tiers, a full queue, no count map and no store; one coalesced health notice, held in combat, no sound; `/bugsy status` and the status line. The breaker: 49/50 ms, the rolling window (99/132 ms) and expiry, slow and fast throws, untrustworthy timers (throwing, secret, non-numeric, infinite, backwards), a shared-timer reset between calls or within a call clears the window and a future-stamped bin never counts, one trip, skipped not counted as loss, a reload starts fresh; full, minimal and manual reports carry both snapshots and Markdown shows them | 100 |
 | `test_ui.lua` | Notices held in combat and sent after; a problem's first occurrence in a new session announced again, not twice in one session; `|` escaped in the list and details; mute, copy guidance, clear all with confirmation, filters, the empty list, the status line; the report flow (answers, preview, destination, JSON, copy guidance), Report a problem; every widget method called exists in build 70959 (`Kit.checkMethods`) | 97 |
 
 **Mutation checks** (each behaviour broken on purpose, a test went red): the recursion guard, the
@@ -25,7 +26,11 @@ repair (as a whole, attribution, evidence), the call-path count, empty arrays, c
 version-free heading; and for front mode: the passing guard, collector exclusion, the nil-height
 liveness rule, front kept by its own installation, the one-attempt rule and its marking, success
 by identity, the session snapshot of the setting, the forwarded arguments, clearing the passing
-guard. (The collector return inside liveness is a second safeguard: both entry points return
+guard; and for #14/#11: nil-height deliveries counted, the 100 boundary, a loose notice match, the
+notice stored as a problem, `deliveredAfter`, the handler skipping the observation, a backwards
+timer accepted, the call threshold, bins that never expire, no suspension, the passing guard left
+set, an unvalidated timer, a minimal report without capture, Markdown hiding the suspension, no
+health notice. (The collector return inside liveness is a second safeguard: both entry points return
 before it, so breaking it alone changes nothing.)
 
 What the mock cannot prove: that the client's stack levels match the formula and fallback, that
@@ -47,6 +52,8 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | `throw` | **Done, 70959.** P9: a throwing handler becomes a Lua Warning (Blizzard's window, `LUA_WARNING`); no recursion; capture continues | yes |
 | `front` | **Done, 70959: passed.** P7: Bugsy in front of the installed wrapper records its kept errors, locals and a direct report, and keeps capturing after the wrapper's measured cutoff (1 000) | yes |
 | `frontown` | **Done, 70959: passed.** P6, P7: front installed in combat, no taint or blocked action; downstream formula levels hold; a report while passing dropped and counted; a throwing wrapper counted; a later wrapper keeps the chain | yes |
+| `pause` | **Done, 70959.** #14: the client pauses at the 100th error in one frame (99 twice does not); its notice is not sent at 100 or 101; Bugsy's suspicion at exactly 100; events still captured | for D16 |
+| `frontslow` | **Done, 70959.** #11: under the thresholds nothing trips; one 60 ms pass-on trips; in combat the window trips at 105 ms; capture continues | for D16 |
 | `coexist` | **Done, 70959.** P7: with the collector, collector mode and errors through it; without it, the embedding addon wraps the handler and Bugsy goes front | yes |
 | `popups` | **Done, 70959.** P4: the forbidden function is named (`TargetUnit()`); P10: with Blizzard's listeners unregistered, no popup. Taint of doing so not yet checked (B-18) | owner's decision |
 | `copy` | **Done, 70959.** P12: Bugsy's doubled-pipe display copies back to the original exactly (`|`, colour codes, UTF-8); raw text copies what is rendered; 63 KB identical. A tab's fate is unknown | Copy details part |

@@ -853,6 +853,167 @@ Probe:Steps("frontown", {
     { text = "Reload to write the taint log and save the results (the probe's wrappers go away).", reload = true },
 })
 
+-- The client's pause (#14): bursts of 99, 100 and 101 errors in one frame, each followed
+-- by a marker one second later. Counted on both sides: attempts here, deliveries in
+-- Bugsy (Diagnostics), the marker's arrival, Bugsy's pause observation.
+-- Scoped to this invocation (Codex, PR #17): the saved result is cleared first, the
+-- marker carries the run's id and is established as a problem BEFORE the burst (so
+-- Bugsy's new-problem cap cannot hide it), and its arrival is the change in its count.
+local function received(match)
+    local d = diag(match)
+    return (d.count or 0) + (d.unconfirmed or 0)
+end
+
+-- Both marker errors come from this one line (Codex, PR #17): the grouping signature reads
+-- the stack, so a seed and a later marker raised at different lines would be two problems,
+-- and the later one, a new problem, would be dropped at the new-problem cap.
+local function markerRaiser(marker) return function() error(marker, 0) end end
+
+-- Before each burst: this run's marker, recorded as a problem first.
+local function burstPrepare(label)
+    BugsyProbeDB.pause = BugsyProbeDB.pause or {}
+    BugsyProbeDB.pause[label] = nil
+    BugsyProbeDB.pauseRun = BugsyProbeDB.pauseRun or {}
+    local id = ("%.0f"):format(GetTime() * 1000)
+    local marker = "BugsyProbe pause marker " .. label .. " r" .. id
+    BugsyProbeDB.pauseRun[label] = { id = id, marker = marker }
+    C_Timer.After(0, markerRaiser(marker))
+    return true, "marker " .. id
+end
+
+local function burstFire(label, n)
+    local run = BugsyProbeDB.pauseRun and BugsyProbeDB.pauseRun[label]
+    if not run then return false, "the marker step did not run" end
+    local marker = run.marker
+    local before, d0 = received(marker), diag().deliveries or 0
+    if before < 1 then return false, "the marker is not recorded yet: wait a second and press Run again" end
+    for i = 1, n do
+        C_Timer.After(0, function() error("BugsyProbe pause burst " .. label .. " r" .. run.id .. " #" .. i, 0) end)
+    end
+    C_Timer.After(1, markerRaiser(marker))
+    C_Timer.After(2.5, function()
+        local d = diag()
+        local p = d.pause and d.pause.pause or {}
+        local r = { attempts = n, deliveries = (d.deliveries or 0) - d0, markerReceived = received(marker) - before > 0,
+            pauseStatus = p.status, evidence = p.evidence, observedCalls = p.observedCalls,
+            noticeSeen = p.noticeSeen, deliveredAfter = p.deliveredAfter, mode = d.mode }
+        BugsyProbeDB.pause[label] = r
+        say(("pause[%s]: %d attempts, %d delivered to Bugsy, marker %s; Bugsy: %s (%s), %s calls, notice %s, %s after")
+            :format(label, n, r.deliveries, r.markerReceived and "received" or "NOT received", tostring(r.pauseStatus),
+                tostring(r.evidence), tostring(r.observedCalls), tostring(r.noticeSeen), tostring(r.deliveredAfter)))
+    end)
+    return true, "scheduled"
+end
+
+local function burstDone(label)
+    return function() return BugsyProbeDB.pause and BugsyProbeDB.pause[label] ~= nil, "running" end
+end
+
+Probe:Steps("pause", {
+    title = "The client's error-reporting pause (P8, #14)", rev = 3,
+    { text = "From a fresh /reload. Recording this run's marker.", auto = true, run = function() return burstPrepare("99") end },
+    { text = "Press Run: 99 errors in one frame, then the marker 1 s later.", run = function() return burstFire("99", 99) end },
+    { text = "Waiting (about 3 s).", wait = burstDone("99"), timeout = 20 },
+    { text = "Recording the next marker.", auto = true, run = function() return burstPrepare("99again") end },
+    { text = "Press Run: another 99 in one frame, then the marker (is the limit per frame, or does it add up?).",
+      run = function() return burstFire("99again", 99) end },
+    { text = "Waiting (about 3 s).", wait = burstDone("99again"), timeout = 20 },
+    { text = "Reload.", reload = true },
+    { text = "Recording this run's marker.", auto = true, run = function() return burstPrepare("100") end },
+    { text = "Press Run: 100 errors in one frame, then the marker.", run = function() return burstFire("100", 100) end },
+    { text = "Waiting (about 3 s).", wait = burstDone("100"), timeout = 20 },
+    { text = "Press Run: a forbidden call (a Blizzard popup appears: press Ignore). Are blocked actions still captured after the burst?",
+      run = function()
+          BugsyProbeDB.pause = BugsyProbeDB.pause or {}
+          BugsyProbeDB.pause.eventAfter = nil
+          local before = received("ADDON_ACTION_FORBIDDEN")
+          forbid()
+          C_Timer.After(1, function()
+              BugsyProbeDB.pause.eventAfter = received("ADDON_ACTION_FORBIDDEN") - before
+              say("pause: forbidden events recorded after the burst: " .. BugsyProbeDB.pause.eventAfter)
+          end)
+          return true end },
+    { text = "Waiting.", wait = function() return BugsyProbeDB.pause and BugsyProbeDB.pause.eventAfter ~= nil, "running" end, timeout = 10 },
+    { text = "Reload.", reload = true },
+    { text = "Recording this run's marker.", auto = true, run = function() return burstPrepare("101") end },
+    { text = "Press Run: 101 errors in one frame, then the marker.", run = function() return burstFire("101", 101) end },
+    { text = "Waiting (about 3 s).", wait = burstDone("101"), timeout = 20 },
+    { text = "Reload to end with error reporting on.", reload = true },
+})
+
+-- The front's circuit breaker (#11): a probe wrapper behind Bugsy with a finite cost
+-- per call (a busy-wait of N ms on the profiler timer), never a runaway.
+local SW = { cost = 0, calls = 0 }
+-- each run's errors carry its id, so an earlier run's problems never satisfy a wait
+local function fs(text) return "BugsyProbe frontslow " .. (SW.run or "") .. " " .. text end
+local function slowWrapper(msg, ...)
+    SW.calls = SW.calls + 1
+    local t = debugprofilestop()
+    while debugprofilestop() - t < SW.cost do end
+    if SW.prev then return SW.prev(msg, ...) end
+end
+
+local function fwd(label)
+    local d = diag()
+    local f = d.forward or {}
+    local r = { suspended = f.suspended, reason = f.reason, elapsedMs = f.elapsedMs, windowMs = f.windowMs,
+        skipped = f.skipped, timingUnavailable = f.timingUnavailable, wrapperCalls = SW.calls, mode = d.mode,
+        inCombat = InCombatLockdown() }
+    BugsyProbeDB.frontslow = BugsyProbeDB.frontslow or {}
+    BugsyProbeDB.frontslow[label] = r
+    say(("frontslow[%s]: suspended=%s reason=%s elapsed=%s window=%s skipped=%s wrapperCalls=%d mode=%s combat=%s")
+        :format(label, tostring(r.suspended), tostring(r.reason), tostring(r.elapsedMs), tostring(r.windowMs),
+            tostring(r.skipped), SW.calls, tostring(r.mode), tostring(r.inCombat)))
+    return r
+end
+
+local function installSlow(cost)
+    SW.cost, SW.calls = cost, 0
+    SW.prev = geterrorhandler()
+    seterrorhandler(slowWrapper)
+    raiseLater(fs("install"))
+    return true, "wrapper installed, cost " .. cost .. " ms"
+end
+
+Probe:Steps("frontslow", {
+    title = "The front's circuit breaker (#11, D16)", rev = 2,
+    { text = "Needs: the addon that installs its own error handler DISABLED, no collector, /bugsy front on, a fresh /reload. Press Run to check.",
+      run = function() SW.run = ("r%.0f"):format(GetTime() * 1000); local d = diag(); return d.mode == "native" and not d.frontTried, tostring(d.mode) end },
+    { text = "Press Run: the probe installs a wrapper costing 20 ms per call, then an error; Bugsy goes in front of it.",
+      run = function() return installSlow(20) end },
+    { text = "Waiting for Bugsy in front.", wait = function() return diag().fronted == true, "not in front yet" end, timeout = 15 },
+    { text = "Press Run: three errors 0.5 s apart (60 ms in total, under both thresholds).",
+      run = function()
+          for i = 1, 3 do C_Timer.After(i * 0.5, function() error(fs("under ") .. i, 0) end) end
+          return true end },
+    { text = "Waiting.", wait = function() return (diag(fs("under 3")).count or 0) > 0, "running" end, timeout = 15,
+      check = function() local r = fwd("under"); return r.suspended == false, "not suspended" end },
+    { text = "Press Run: one error at 60 ms (one slow call), then another error 1 s later.",
+      run = function()
+          SW.cost = 60
+          raiseLater(fs("slow call"))
+          C_Timer.After(1, function() error(fs("after the trip"), 0) end)
+          return true end },
+    { text = "Waiting.", wait = function() return (diag(fs("after the trip")).count or 0) > 0, "running" end, timeout = 15,
+      check = function() local r = fwd("call")
+          return r.suspended == true and r.reason == "call" and (r.skipped or 0) >= 1,
+              ("reason %s, skipped %s, wrapper calls %d"):format(tostring(r.reason), tostring(r.skipped), SW.calls) end },
+    { text = "Reload (the suspension lasts the session).", reload = true },
+    { text = "Press Run to check the fresh session (native, no attempt yet).",
+      run = function() SW.run = ("r%.0f"):format(GetTime() * 1000); local d = diag(); return d.mode == "native" and not d.frontTried, tostring(d.mode) end },
+    { text = "Start a fight. In combat, press Run: a wrapper costing 15 ms, then ten errors 0.05 s apart (150 ms within a second).",
+      run = function()
+          if not InCombatLockdown() then return false, "not in combat yet" end
+          installSlow(15)
+          for i = 1, 10 do C_Timer.After(1 + i * 0.05, function() error(fs("window ") .. i, 0) end) end
+          return true end },
+    { text = "Waiting.", wait = function() return (diag(fs("window 10")).count or 0) > 0, "running" end, timeout = 20,
+      check = function() local r = fwd("window")
+          return r.suspended == true and r.reason == "window", ("reason %s, combat %s"):format(tostring(r.reason), tostring(r.inCombat)) end },
+    { text = "Did the game hitch noticeably, or show a blocked action, during this procedure?", ask = true },
+    { text = "Reload to end.", reload = true },
+})
+
 Probe:RegisterEvents(boot, { "ADDON_LOADED" })
 boot:SetScript("OnEvent", function(_, _, name)
     if name ~= ADDON then return end

@@ -29,28 +29,61 @@ local function alertSound(db)
     if play then pcall(play, Bugsy.SOUND, Bugsy.SOUND_CHANNEL) end
 end
 
--- Notices: one line and one sound per new problem, at most one every NOTICE_EVERY
--- seconds, held in combat. The chat line and the sound have their own settings.
-local pendingNew, lastNotice = 0, -1e9
+-- Capture-health lines (#14, #11), each said once per state; the full wording is in
+-- Capture.limits (/bugsy status, reports).
+local announced = {}
+local function healthLines()
+    local S, out = Capture.state, {}
+    local p = S.health.pause
+    if p and announced.pause ~= p.status then
+        announced.pause = p.status
+        out[#out + 1] = (p.status == "reported")
+            and "the game says Lua error reporting is paused until you /reload. See /bugsy status."
+            or "a large burst of errors: the game may have paused Lua error reporting. /reload resets it; see /bugsy status."
+    end
+    if S.forward.suspended and not announced.forward then
+        announced.forward = true
+        out[#out + 1] = "stopped passing errors to another addon's error handler after it was slow. See /bugsy status."
+    end
+    return out
+end
+
+-- Notices: one line and one sound per new problem, and one line per capture-health
+-- change; at most one flush every NOTICE_EVERY seconds, held in combat. The chat
+-- lines and the sound have their own settings; health lines never play the sound.
+local pendingNew, pendingHealth, lastNotice = 0, false, -1e9
 local function flushNotices()
-    if pendingNew == 0 or API.InCombat() then return end
+    if (pendingNew == 0 and not pendingHealth) or API.InCombat() then return end
     local db = Store.db()
-    if not (db and (db.settings.notices or db.settings.sound)) then pendingNew = 0; return end
+    if not db then return end
     local now = API.Uptime()
     if now - lastNotice < Bugsy.NOTICE_EVERY then
         API.After(Bugsy.NOTICE_EVERY - (now - lastNotice), flushNotices)
         return
     end
     lastNotice = now
+    if pendingHealth then
+        pendingHealth = false
+        local lines = healthLines()
+        if db.settings.notices then for _, l in ipairs(lines) do say(l) end end
+    end
     local n = pendingNew
     pendingNew = 0
-    if db.settings.notices then
-        say(n == 1 and "caught a new problem. Type /bugsy to see it."
-            or (n .. " new problems. Type /bugsy to see them."))
+    if n > 0 then
+        if db.settings.notices then
+            say(n == 1 and "caught a new problem. Type /bugsy to see it."
+                or (n .. " new problems. Type /bugsy to see them."))
+        end
+        alertSound(db)
     end
-    alertSound(db)
 end
 Bugsy.flushNotices = flushNotices
+
+-- Called from inside the handler when a health observation changes: queue only.
+Capture.onHealth = function()
+    pendingHealth = true
+    API.After(0, flushNotices)
+end
 
 Store.OnChange(function(what, p)
     if what == "new" and not (p and p.muted) then
@@ -72,6 +105,7 @@ boot:SetScript("OnEvent", function(_, event, name)
             local db = Store.adopt(rawget(_G, "BugsyDB"))
             _G.BugsyDB = db
             Capture.state.settings = db.settings
+            Capture.state.session = db.session
             -- read once a session (Codex, front design): /bugsy front changes the next session
             Capture.state.frontEnabled = db.settings.front ~= false
             Capture.sink = { record = Store.record, count = Store.count }
@@ -112,6 +146,7 @@ function Bugsy.Diagnostics(match)
         passSuppressed = S.stats.passSuppressed, passReturned = S.stats.passReturned,
         forwardFailed = S.stats.forwardFailed,
         nativeInCollector = S.stats.nativeInCollector, failures = S.failures,
+        deliveries = S.stats.deliveries, pause = Capture.healthSnapshot(), forward = Capture.forwardSnapshot(),
         queueDropped = S.stats.queueDropped, suppressed = 0 }
     for _, n in pairs(S.stats.suppressed) do d.suppressed = d.suppressed + n end
     if type(match) == "string" and match ~= "" then

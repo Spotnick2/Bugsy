@@ -91,6 +91,17 @@ function API.Now() local f = G("time"); return f and f() or 0 end
 function API.Uptime() local f = G("GetTime"); return f and f() or 0 end
 function API.InCombat() local f = G("InCombatLockdown"); return f and f() == true or false end
 function API.ProfileMs() local f = G("debugprofilestop"); return f and f() or 0 end
+-- The profiler timer for decisions (#11): a readable, finite number, or nil when it
+-- is missing, throws or returns anything else. Never calls debugprofilestart (shared).
+function API.ProfileTime()
+    local f = G("debugprofilestop")
+    if not f then return nil end
+    local ok, v = pcall(f)
+    if not ok or not Safe.readable(v) or type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then
+        return nil
+    end
+    return v
+end
 
 function API.After(seconds, fn)
     local timer = G("C_Timer")
