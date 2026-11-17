@@ -379,3 +379,35 @@ the wrapper's pass-backs). Both procedures: all checks passed.
 - **P7: not run.** Neither the standalone collector nor the addon that embeds a copy was enabled
   (the owner had disabled them), so Bugsy ran natively both times. Rev 3 checks the collector is
   loaded before it goes on.
+
+### Reruns: `floods` rev 2, `coexist` rev 3, `popups` rev 2, `copy` rev 2: build 70959, 2026-11-17
+
+- **[game, 70959] The client pauses error reporting after a burst.** 1 000 identical errors raised
+  from timers in one frame: Bugsy received **100** (55 sampled, 45 counted), then the client called
+  the handler once more with the message *"Error reporting is now paused and will resume after
+  reloading the UI."* (a plain error message, with the 101st error's stack) and stopped calling
+  any error handler. The next two floods (1 000 different errors in one frame, then 1 000 spread
+  over 2 s) delivered **nothing**, until `/reload`. In the `front` run, 1 100 errors spread over
+  2 s from a quiet start were all delivered: the pause is triggered by a burst (100 in one frame
+  measured; the exact window is not). Consequences:
+  - after such a burst Bugsy, like every other collector, is blind until a reload, and the only
+    sign is that notice. Whether its text is translated is unknown (not in Blizzard's UI source:
+    it comes from the client). P15.
+  - Bugsy's per-burst budgets (15 full, 40 top) sit below the client's 100.
+  - no freeze (owner); longest frame 27 ms during the first burst.
+  Rev 3 reloads after each burst and records Bugsy's own memory. Lua memory for all addons stayed
+  about 0.4-0.5 GB; Bugsy's own share is what rev 3 measures.
+- **[game, 70959] P7 with the collector:** with the standalone collector, its viewer and the
+  addon that embeds a copy all enabled, Bugsy started in **collector** mode (the collector's no-op
+  setter: `settable=false`); an error was recorded through the collector (`entry=collector`, full
+  tier, raise site as the location).
+- **[game, 70959] P7, standalone collector disabled, the embedding addon enabled:** its embedded
+  copy did **not** become a collector; that addon installed its own wrapper instead, and Bugsy went
+  **front** (`entry=front`). So on this setup the "embedded copy" case is the wrapper case.
+- **[game, 70959] P10:** after unregistering `ADDON_ACTION_FORBIDDEN`/`BLOCKED` from `UIParent`
+  and `GameEvent`, a second forbidden call raised **no popup**. Taint from doing so: not observed
+  (taintLog off in this run); B-18 still needs that check.
+- **[game, 70959] P12, Bugsy's side:** Copy details then Ctrl+C copied Bugsy's text (pasted into
+  the probe's note intact, line breaks aside: that note box is single-line). The probe's own
+  byte comparison failed again for a probe reason (the step finished on Run, before the paste);
+  rev 3 waits for the owner.
