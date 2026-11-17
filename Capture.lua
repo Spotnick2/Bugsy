@@ -422,10 +422,25 @@ end
 -- (BINS stamped bins of BIN_MS), latches the suspension for this UI session. It
 -- cannot bound the first slow call; it stops the next ones. Timing that is missing,
 -- unreadable or backwards is counted, never taken as fast or slow.
+-- The profiler timer is shared: another addon can reset it (debugprofilestart), so a
+-- reading earlier than the last one is a discontinuity, within a call or between
+-- calls. Then the window's history is meaningless and is discarded (Codex, PR #17);
+-- a bin stamped "in the future" never counts either.
+local function clearBins(F)
+    for k = 1, Capture.BINS do F.stamps[k], F.bins[k] = nil, nil end
+end
+
 function Capture._accountForward(t0)
     local F = S.forward
     local t1 = API.ProfileTime()
-    if not t0 or not t1 or t1 < t0 then F.timingUnavailable = F.timingUnavailable + 1; return end
+    if t0 and F.lastT and t0 < F.lastT then clearBins(F) end          -- reset between calls
+    if not t0 or not t1 or t1 < t0 then
+        F.timingUnavailable = F.timingUnavailable + 1
+        if t0 and t1 then clearBins(F) end                           -- reset within the call
+        F.lastT = t1
+        return
+    end
+    F.lastT = t1
     local elapsed = t1 - t0
     local bin = math.floor(t1 / Capture.BIN_MS)
     local i = bin % Capture.BINS + 1
@@ -434,7 +449,8 @@ function Capture._accountForward(t0)
     local window = 0
     for k = 1, Capture.BINS do
         local stamp = F.stamps[k]
-        if stamp and bin - stamp < Capture.BINS then window = window + F.bins[k] end
+        local age = stamp and (bin - stamp)
+        if age and age >= 0 and age < Capture.BINS then window = window + F.bins[k] end
     end
     local reason
     if elapsed >= Capture.FRONT_SLOW_CALL_MS then reason = "call"

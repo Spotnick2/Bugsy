@@ -183,6 +183,30 @@ WoW.ms = WoW.ms + 2000                        -- idle: the bins expire
 WoW.raise("g")
 eq(C2.state.forward.suspended, false, "older bins expire: 40 ms now, not 120")
 
+-- A reset of the shared profiler timer (another addon's debugprofilestart): old bins
+-- must not count (Codex, PR #17).
+-- The resets land in the SAME bin as the old costs, so only clearing saves it.
+_, C2, S2, W = frontWith(20)
+WoW.ms = 100
+WoW.raise("h"); WoW.raise("i")                -- 40 ms in bin 1 (100-140)
+WoW.ms = 105                                  -- reset between calls
+WoW.raise("j"); WoW.raise("j2"); WoW.raise("j3")   -- 60 ms more in bin 1
+eq(C2.state.forward.suspended, false, "a reset between calls clears the window: 60 ms, not 100")
+_, C2, S2, W = frontWith(function(n) if n == 3 then return 110 - WoW.ms end return 20 end)   -- call 3: the timer goes back to 110
+WoW.ms = 100
+WoW.raise("k"); WoW.raise("l")                -- 40 ms in bin 1
+WoW.raise("m")                                -- the timer resets during this pass-on
+check(C2.state.forward.timingUnavailable >= 1, "a reset within a call is unavailable timing")
+WoW.raise("n"); WoW.raise("n2"); WoW.raise("n3")   -- 60 ms more in bin 1
+eq(C2.state.forward.suspended, false, "and clears the window: 60 ms, not 100")
+-- A bin stamped "in the future" never counts (a second safeguard: the clears above
+-- already discard such bins, so this is tested on the state directly).
+_, C2 = frontWith(0)
+C2.state.forward.stamps[5], C2.state.forward.bins[5] = 999994, 500   -- slot 5, not the one bin 0 uses
+WoW.ms = 0
+WoW.raise("o")
+eq(C2.state.forward.suspended, false, "a future-stamped bin is not counted")
+
 -- Timing that cannot be trusted: missing, throwing, secret, non-numeric, infinite, backwards.
 local function badTimer(label, fn)
     local _, C3 = frontWith(0)
