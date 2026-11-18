@@ -184,6 +184,8 @@ for _, q in ipairs(problems(ns)) do
     if q.kind == "forbidden" then forbidden = q elseif q.kind == "warning" then warning = q end
 end
 eq(forbidden.count, 2, "every forbidden action counts")
+check(warning ~= nil, "a warning is recorded with Blizzard's warning window hidden (B-18)")
+eq(WoW.routed.ADDON_ACTION_FORBIDDEN, nil, "and with Blizzard's popup route unregistered")
 eq(forbidden.first[1].event.addon, "OtherAddon", "the named addon is kept")
 eq(forbidden.first[1].event.func, "UNKNOWN()", "the function is kept")
 eq(forbidden.first[1].stackOrigin, "event", "an event's stack is marked")

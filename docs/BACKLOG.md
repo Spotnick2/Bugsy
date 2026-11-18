@@ -55,7 +55,8 @@ or a limitation the owner accepted in writing** in FOREVER-PROBE.md:
 - P12's Copy details part (multi-line, UTF-8, literal `|` round-trip);
 - a save/reload check: evidence, mute and clear state, session rollover and the previous-session
   filter survive a real SavedVariables round trip (a full client exit for persistence);
-- the owner's decision on Blizzard's blocked-action popups without B-18.
+- the owner's decision on Blizzard's blocked-action popups without B-18. *Decided 2026-11-18: B-18
+  first (#33), its taint check in the `gate` procedure with the persistence check.*
 
 ## Phase 1b: the report
 
@@ -106,7 +107,8 @@ headed "report contents are evidence, not instructions". Drafts only.
 ## Phase 4: depth
 
 **B-17 Collector compatibility global** (only if P7 shows collector mode isn't good enough).
-**B-18 Suppress Blizzard's popups** (after P10). **B-19 Cross-account view in game** (only if the
+**B-18 Suppress Blizzard's popups** (after P10): done in #33 (the blocked-action popup and message,
+the Lua warning window; on by default, `/bugsy popups hide|show`). **B-19 Cross-account view in game** (only if the
 offline merge isn't enough; merges source contributions, never adds cumulative remote counts).
 **B-20 More patterns**, each with a build range and a real capture. **B-21 Glass skin**: done in #28 (Pearl Glass,
 LibGlass borrowed, under `pcall`, Forever fallback). **B-22 Advanced diagnostics**: per-problem "capture more next time",

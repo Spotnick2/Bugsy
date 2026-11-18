@@ -195,8 +195,11 @@ above. Whether that is acceptable for daily use is a P7 acceptance question.
 `LUA_WARNING` and `ADDON_ACTION_BLOCKED/FORBIDDEN` arrive on our event frame (native and displaced
 modes) and use the same budget and queue with kind `warning`, `blocked`, `forbidden`; the event
 name, the named addon and the function are kept as separate fields. Every occurrence counts.
-Whether Bugsy also suppresses Blizzard's popups, as the collector does, waits for P10 (B-18);
-whether the popups are acceptable day to day is a release check.
+Blizzard's own displays of the same events are hidden at load by default, as the collector does
+(B-18, #33): the blocked-action popup and the "Interface action failed" message (on Forever both
+go through Blizzard_Game's `GameEvent` router: `GameEvent.UnregisterInternalEvent`) and the Lua
+warning window (`LUA_WARNING` on `ScriptErrorsFrame`). The router's handlers are its own locals,
+so the setting (`hidePopups`, `/bugsy popups hide|show`) is read once a session, like front.
 
 ### The drain
 
@@ -537,7 +540,7 @@ flushes SavedVariables (reload, logout).
 | D2 | Native by default; collector mode with backfill when its API is present after a handler change | The owner removes the standalone collector; a copy embedded in another addon must not lose errors |
 | D3 | No compatibility global with the collector's name in the MVP | It changes other addons' behaviour; an embedded copy works through collector mode |
 | D4 | Locals off by default, a setting in the MVP | Privacy, size, secrets; replacement still needs them on demand |
-| D5 | Blizzard's ADDON_ACTION popup left alone until P10 | Untested on Forever; a release check decides |
+| D5 | Blizzard's popups for blocked actions and Lua warnings hidden by default (B-18), from the next session when changed | The owner's call for v0.1.0 (2026-11-18); P10 measured no popup after unregistering; the taint check is the release gate's `gate` procedure |
 | D6 | Group by the faulting line (first location), not the first three | One bug from many callers is one problem; call paths still counted |
 | D7 | Versions outside signatures, inside occurrences | Cross-release and cross-account matching; no stale evidence presented as current |
 | D8 | Library in phase 2, its own repo before the first consumer | One moving part during the MVP |

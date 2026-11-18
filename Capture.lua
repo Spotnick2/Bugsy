@@ -741,6 +741,45 @@ local function modeLimits()
     return {}
 end
 
+-- Blizzard's own displays of what Bugsy records (B-18, #33): the blocked-action popup
+-- (ADDON_ACTION_FORBIDDEN) and the "Interface action failed" message (ADDON_ACTION_BLOCKED),
+-- which on Forever go through Blizzard_Game's router (GameEvent, registered while it loads,
+-- before any addon), and the Lua warning window (LUA_WARNING on ScriptErrorsFrame). UIParent
+-- doesn't register them on Forever; it's checked anyway. Bugsy's own event frame keeps
+-- recording all three. The router's handlers are its own locals and can't be put back from
+-- outside, so this runs once at load when the setting is on, and turning it off takes
+-- effect from the next session. Returns what was unregistered, as "<frame>:<event>".
+Capture.POPUP_EVENTS = { "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED" }
+function Capture.SuppressPopups()
+    local done = S.popupsHidden or {}
+    local function note(what)
+        for _, d in ipairs(done) do if d == what then return end end
+        done[#done + 1] = what
+    end
+    local router = G("GameEvent")
+    local unregister = type(router) == "table" and rawget(router, "UnregisterInternalEvent")
+    if type(unregister) == "function" then
+        for _, ev in ipairs(Capture.POPUP_EVENTS) do
+            if pcall(unregister, ev) then note("GameEvent:" .. ev) end
+        end
+    end
+    local frames = {
+        { name = "UIParent", events = Capture.POPUP_EVENTS },
+        { name = "ScriptErrorsFrame", events = { "LUA_WARNING" } },
+    }
+    for _, f in ipairs(frames) do
+        local frame = G(f.name)
+        if type(frame) == "table" and type(frame.IsEventRegistered) == "function" then
+            for _, ev in ipairs(f.events) do
+                local ok, on = pcall(frame.IsEventRegistered, frame, ev)
+                if ok and on == true and pcall(frame.UnregisterEvent, frame, ev) then note(f.name .. ":" .. ev) end
+            end
+        end
+    end
+    S.popupsHidden = done
+    return done
+end
+
 -- What the status line, /bugsy status and reports say: the mode's limits, then the
 -- health observations (#14, #11), whatever the mode.
 function Capture.limits()

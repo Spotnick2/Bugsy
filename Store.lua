@@ -177,6 +177,7 @@ function Store.adopt(saved)
     if saved.minimap.hide ~= nil and type(saved.minimap.hide) ~= "boolean" then saved.minimap.hide = nil end
     if saved.minimap.minimapPos ~= nil and type(saved.minimap.minimapPos) ~= "number" then saved.minimap.minimapPos = nil end
     saved.settings.front = saved.settings.front ~= false
+    saved.settings.hidePopups = saved.settings.hidePopups ~= false   -- B-18 (#33)
     -- The window's look (#28): the own look and following Glass UI (on by default, as every
     -- suite member); the window's place and size. Junk reads as the default.
     if saved.settings.look ~= "forever" and saved.settings.look ~= "pearl" then saved.settings.look = nil end

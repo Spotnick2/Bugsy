@@ -471,3 +471,14 @@ the wrapper's pass-backs). Both procedures: all checks passed.
 
 - **[game, 70959]** All six alert sounds play with `PlaySoundFile(id, "Master")`, chosen through
   `/bugsy sound 1-6` (owner, by ear): 597938, 1859972, 1859973, 1859974, 1859975 and 550736.
+
+### The owner's decisions on the v0.1.0 gate: 2026-11-18
+
+- **P7, collector mode's limits: accepted** for v0.1.0. With the standalone collector loaded, Bugsy
+  reads errors through it and inherits its limits (no secret messages stored, everything past
+  10 errors a second dropped uncounted, a stack possibly from an earlier repeat); Bugsy states them
+  in `/bugsy status` and in reports. On the owner's setup the addon that embeds a copy installs its
+  own wrapper instead, and Bugsy goes in front of it without these limits (measured above).
+- **Blizzard's popups: B-18 first** (#33). Bugsy hides the blocked-action popup and message and the
+  Lua warning window by default. Its taint check (P10's remaining half) and the full-exit
+  persistence check are the probe's `gate` procedure (`/fp steps bugsy gate`): results pending.

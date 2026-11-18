@@ -222,6 +222,15 @@ local function resetLibs()
     GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
     GameTooltip._lines = {}
     function GameTooltip:AddLine(text) self._lines[#self._lines + 1] = text end
+    -- Blizzard_Game's event router (wow-ui-source, forever: Shared/EventRouting.lua), which
+    -- holds the blocked-action events on Forever, and the Lua warning window's frame
+    -- (Blizzard_ScriptErrorsFrame), both loaded before any addon (B-18, #33).
+    WoW.routed = { ADDON_ACTION_FORBIDDEN = true, ADDON_ACTION_BLOCKED = true, TRADE_REQUEST = true }
+    GameEvent = {
+        UnregisterInternalEvent = function(event) WoW.routed[event] = nil end,
+    }
+    ScriptErrorsFrame = newWidget("Frame", UIParent, "ScriptErrorsFrame")
+    ScriptErrorsFrame:RegisterEvent("LUA_WARNING")
 end
 table.insert(WoW.onReset, resetLibs)
 resetLibs()
@@ -270,4 +279,4 @@ function WoW.newSuite()
     return GlassUI.Suite
 end
 
-Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip", "Minimap", "GlassUI", "UISpecialFrames", "BugsyFrame" })
+Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip", "Minimap", "GlassUI", "UISpecialFrames", "BugsyFrame", "GameEvent", "ScriptErrorsFrame" })
