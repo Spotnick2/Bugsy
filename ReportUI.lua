@@ -315,7 +315,11 @@ function ReportUI.Build(f, body)
         page:SetAllPoints(content)
         v.pages[i] = page
     end
-    buildDescribe(v, v.pages[1])
+    -- Describe scrolls: with its details open it is taller than the smallest window (Codex, #30).
+    v.describeScroll, v.describeChild = W.Scroll(v.pages[1])
+    v.describeScroll:SetPoint("TOPLEFT")
+    v.describeScroll:SetPoint("BOTTOMRIGHT", -22, 0)
+    buildDescribe(v, v.describeChild)
     buildReview(v, v.pages[2])
     buildCopy(v, v.pages[3])
 
@@ -354,6 +358,12 @@ local function addonText(name)
     return ns.UI.escape(M.Title(name) .. (version and ("  " .. version) or ""))
 end
 
+local function heightOf(region, fallback)
+    local h
+    if region.GetStringHeight then h = region:GetStringHeight() else h = region:GetHeight() end
+    return (type(h) == "number" and h > 0) and h or fallback
+end
+
 local function refreshDescribe(v, d)
     local p = d.mode == "problem" and Store.Get(d.problemId)
     v.picker:setLabel(addonText(d.addon) or L["Choose an addon..."])
@@ -385,6 +395,12 @@ local function refreshDescribe(v, d)
     v.info:SetText(d.mode == "problem"
         and L["The error's technical details are added automatically. You can review everything before copying."]
         or L["Your game and addon versions are added automatically. You can review everything before copying."])
+    -- The scroll child's size: the width of the scroll frame, the height of everything above.
+    local w = v.describeScroll:GetWidth()
+    if type(w) == "number" and w > 0 then v.describeChild:SetWidth(w) end
+    v.describeChild:SetHeight(heightOf(v.addonLabel, 14) + 6 + heightOf(v.picker, 26) + 4 + heightOf(v.guess, 24)
+        + 12 + heightOf(v.describeLabel, 14) + 6 + heightOf(v.describe, 72) + 4 + heightOf(v.describeHelp, 12)
+        + 10 + y + (v.noVisible:IsShown() and 38 or 12) + heightOf(v.info, 28) + 8)
 end
 
 local function refreshReview(v, d)

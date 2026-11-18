@@ -67,8 +67,16 @@ local b = after.copyBtn
 b:GetScript("OnEnter")(b); b:GetScript("OnMouseDown")(b); b:GetScript("OnMouseUp")(b); b:GetScript("OnLeave")(b)
 fire(after.tabs.buttons[2]); fire(after.tabs.buttons[1])
 eq(WoW.glassCalls, calls, "refreshing, hovering, pressing and selecting never call LibGlass")
+-- A search survives a look change, shown in the rebuilt field (Codex, #30).
+UI.state.query = "another"
+UI.Refresh()
 -- Back to Forever.
 eq(T.SetChoice("forever"), true, "Forever chosen")
+eq(UI.frame().search.edit:GetText(), "another", "the rebuilt search field shows the kept search")
+check(not UI.frame().search.placeholder:IsShown(), "not its placeholder")
+UI.state.query = ""
+UI.frame().search:setValue("")
+UI.Refresh()
 eq(T.Effective(), "forever", "the Forever look")
 eq(UI.state.selected, id, "the selection kept again")
 

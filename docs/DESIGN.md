@@ -465,7 +465,8 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
   wrote, what is attached, versions, where to report, the privacy note; the full report
   expandable), **3 Copy & report** ("Ready to copy"; the addon's page when its TOC has one, else
   where to look; Markdown for a GitHub issue, a short plain text for a CurseForge comment
-  (`Report.Short`), JSON as the advanced format; Select all and the Ctrl+C instructions). **Copy
+  (`Report.Short`: the error with the version and build it was captured with, a newer installed
+  version labelled apart), JSON as the advanced format; Select all and the Ctrl+C instructions). **Copy
   for a bug report** opens straight at step 3. The answers live in the draft (`Model.NewDraft`), so
   Back, Next and a look change keep them; every change bumps the draft's version and the copy is
   always rendered for the current one (`Model.Render`), so a stale preview can't be copied. Nothing

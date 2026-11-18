@@ -364,6 +364,8 @@ local function buildProblems(f, body)
     f.search = W.Field(left, { placeholder = L["Search problems..."], onChange = function(text)
         state.query = text or ""; UI.Refresh()
     end })
+    -- A rebuilt window (a look change) keeps the filter, so it shows it too (Codex, #30).
+    if state.query and state.query ~= "" then f.search:setValue(state.query) end
     f.search:SetPoint("TOPLEFT", f.tabs, "BOTTOMLEFT", 0, -8)
     f.search:SetPoint("RIGHT", left, "RIGHT", 0, 0)
     f.count = W.Line(left, "GameFontNormalSmall", "heading")

@@ -416,14 +416,14 @@ function Report.Markdown(r)
     end
     add("")
     local pl = r.player or {}
-    if pl.description or pl.doing or pl.happened or pl.expected or pl.steps or pl.noVisibleProblem then
+    -- A corrected addon is an answer on its own, even with every text left blank (Codex, #30).
+    local corrected = pl.addon and p.kind ~= "manual"
+        and not (r.attribution and r.attribution.suspect and r.attribution.suspect.addon == pl.addon)
+    if pl.description or pl.doing or pl.happened or pl.expected or pl.steps or pl.noVisibleProblem or corrected then
         add("### What the player saw")
         if pl.noVisibleProblem then add("- No visible problem noticed.") end
         if pl.description then add("- Description: " .. fieldText(pl.description)) end
-        if pl.addon and not (r.attribution and r.attribution.suspect and r.attribution.suspect.addon == pl.addon)
-            and p.kind ~= "manual" then
-            add("- The player names: " .. pl.addon)
-        end
+        if corrected then add("- The player names: " .. pl.addon) end
         if pl.doing then add("- Doing: " .. fieldText(pl.doing)) end
         if pl.happened then add("- Happened: " .. fieldText(pl.happened)) end
         if pl.expected then add("- Expected: " .. fieldText(pl.expected)) end
@@ -518,11 +518,23 @@ function Report.Short(r)
     local versions = {}
     for _, ad in ipairs(r.addons or {}) do versions[ad.name] = ad.version end
     local who = pl.addon or (a.suspect and a.suspect.addon) or (r.addons and r.addons[1] and r.addons[1].name)
+    -- The evidence is the latest occurrence: its versions are the ones it was captured with,
+    -- which a later update doesn't change (as the Markdown keeps them apart; Codex, #30).
+    local o = p.kind ~= "manual" and r.occurrences and r.occurrences[#r.occurrences] or nil
     add("Bug report from Bugsy: " .. (p.kind == "manual" and "reported by the player" or tostring(p.title)))
     if who then
         local how = pl.addon and (p.kind == "manual" and "" or " (the player's choice)")
             or (a.suspect and (" (appears involved, " .. tostring(a.suspect.confidence) .. " confidence)") or "")
-        add("Addon: " .. who .. " " .. (versions[who] or "?") .. how)
+        local captured = o and type(o.versions) == "table" and type(o.versions[who]) == "string" and o.versions[who]
+        local now = versions[who]
+        if captured then
+            add("Addon: " .. who .. " " .. captured .. how)
+            if now and now ~= captured then add("Installed now: " .. who .. " " .. now) end
+        elseif o then
+            add("Addon: " .. who .. how .. ", installed now: " .. (now or "?"))
+        else
+            add("Addon: " .. who .. " " .. (now or "?") .. how)
+        end
     else
         add("Addon: unknown")
     end
@@ -535,10 +547,9 @@ function Report.Short(r)
     if pl.description then add("What happened: " .. fieldText(pl.description)) end
     if pl.expected then add("Expected: " .. fieldText(pl.expected)) end
     if pl.steps then add("Steps: " .. fieldText(pl.steps)) end
-    local o = r.occurrences and r.occurrences[#r.occurrences]
-    if o and p.kind ~= "manual" then
+    if o then
         add("")
-        add("Error: " .. fieldText(o.message))
+        add(format("Error (build %s, %s): %s", tostring(o.build), when(o.at), fieldText(o.message)))
         local stack = fieldText(o.stack)
         local lines, n = {}, 0
         for line in stack:gmatch("[^\n]+") do

@@ -268,6 +268,11 @@ check(v.noVisible:IsShown(), "'I didn't notice a visible problem' for a captured
 local function tab(field) field.edit:GetScript("OnTabPressed")(field.edit) end
 for _, fl in ipairs({ v.describe, v.expected, v.steps }) do fl.edit:ClearFocus() end
 v.more:setOpen(true)
+UI.Refresh()
+-- With the details open, Describe is taller than the smallest window's page: it scrolls (Codex, #30).
+check(v.describe:GetParent() == v.describeChild and v.describeChild:GetParent() == v.describeScroll,
+    "Describe's fields are in a scroll frame")
+check(v.describeChild:GetHeight() > 460 - 48 - 30 - 92 - 46, "its content is measured taller than the page at 760x460")
 tab(v.describe)
 eq(v.expected.edit._focus, true, "Tab: the next answer")
 v.expected.edit:ClearFocus()
