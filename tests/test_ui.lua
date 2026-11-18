@@ -97,94 +97,243 @@ WoW.raise("a recurring bug")
 drain()
 check(not chatHas("caught"), "but not again in the same session")
 
--- The main window: list, details with | escaped, mute, clear, filters.
+-- The window (#28): which addon, at a glance; the selected problem; search, tabs, muted;
+-- empty states that never imply healthy monitoring when it isn't; Manage.
 UI, ReportUI, Store = ns2.UI, ns2.ReportUI, ns2.Store
+local M = ns2.Model
+local function fire(btn) btn:GetScript("OnClick")(btn, "LeftButton") end
+local function typeIn(field, text)
+    field.edit:SetText(text)
+    field.edit:GetScript("OnTextChanged")(field.edit, true)
+end
+local function visibleRows(f)
+    local out = {}
+    for _, row in ipairs(f.rows) do if row:IsShown() then out[#out + 1] = row end end
+    return out
+end
+
 WoW.raise("a | pipe |cffff0000not colour|r")
 drain()
 UI.Toggle()
 local f = UI.frame()
 check(f:IsShown(), "the window opens")
+eq(BugsyFrame, f, "published as BugsyFrame")
+eq(UISpecialFrames[#UISpecialFrames], "BugsyFrame", "and Escape closes it, as Blizzard's panels")
+eq(UI.state.view, "problems", "on the problems")
+local rows = visibleRows(f)
+eq(#rows, 2, "this session's two problems listed")
+check(rows[1].addon:GetText():find("Test Addon", 1, true), "each row leads with the addon's own title")
 local pipeRow
-for _, row in ipairs(f.rows) do
-    if row:IsShown() and row.text:GetText():find("pipe", 1, true) then pipeRow = row end
-end
-check(pipeRow and pipeRow.text:GetText():find("||cffff0000", 1, true), "a | in a title is escaped for display")
-pipeRow:GetScript("OnClick")(pipeRow)
-check(f.details._text:find("||cffff0000", 1, true), "and in the details")
-f.mute:GetScript("OnClick")(f.mute)
-eq(Store.Get(UI.state.selected).muted, true, "Mute mutes, keeping the evidence")
-eq(f.mute:GetText(), "Unmute", "and the button offers Unmute")
-f.copy:GetScript("OnClick")(f.copy)
-eq(f.hint:GetText(), "Press Ctrl+C to copy.", "copy guidance")
-f.clearAll:GetScript("OnClick")(f.clearAll)
-eq(f.clearAll:GetText(), "Sure?", "clear all asks first")
-f.clearAll:GetScript("OnClick")(f.clearAll)
-eq(#Store.List("all", true), 0, "then clears")
-UI.state.filter = "session"
-local filterBtn
-for _, child in ipairs(f._children or {}) do if child._template == "UIPanelButtonTemplate" and child:GetText() == "This session" then filterBtn = child end end
-if filterBtn then filterBtn:GetScript("OnClick")(filterBtn) end
-eq(UI.state.filter, "previous", "the filter cycles")
-f:GetScript("OnMouseWheel")(f, -1)
-check(f.empty:IsShown(), "an empty list says so")
-check(f.status:GetText():find("Bugsy is", 1, true), "the status line")
+for _, row in ipairs(rows) do if row.summary:GetText():find("pipe", 1, true) then pipeRow = row end end
+check(pipeRow and pipeRow.summary:GetText():find("||cffff0000", 1, true), "a | in a title is escaped for display")
+check(pipeRow.badge.text:GetText() == "1", "a count badge")
+check(pipeRow.time:GetText() ~= "", "a relative last-seen time")
+fire(pipeRow)
+eq(UI.state.selected, pipeRow.id, "a click selects it")
+local d = f.detail
+eq(d.involvedLabel:GetText(), "APPEARS INVOLVED", "the attribution's heading keeps its uncertainty")
+eq(d.addon:GetText(), "Test Addon", "the addon involved")
+eq(d.confidence.text:GetText(), "Cause unconfirmed", "never more certain than the evidence")
+check(d.title:GetText():find("||cffff0000", 1, true), "the title escaped")
+check(d.tech.edit._text:find("||cffff0000", 1, true), "and the technical details")
+check(not d.sections.activity:IsShown(), "no breadcrumbs: no Recent activity (nothing invented)")
+check(d.sections.tech:IsShown() and d.sections.occurrences:IsShown(), "Technical details and Occurrences sections")
+check(not d.note:IsShown(), "an up-to-date addon: no out-of-date note")
 
--- The report flow.
-WoW.raise("report me")
-drain()
-UI.state.filter = "all"
+-- Copy details: the technical details opened and selected for Ctrl+C.
+UI.CopyDetails()
+check(d.sections.tech.open, "Copy details opens the technical details")
+check(d.tech.edit._highlighted, "selected")
+check(d.copyHint:GetText():find("Ctrl+C", 1, true), "with the Ctrl+C hint")
+
+-- Mute: kept, hidden by default, and the selection moves off it.
+local pipeId = pipeRow.id           -- rows are reused after a refresh: keep the id
+fire(f.muteBtn)
+eq(Store.Get(pipeId).muted, true, "Mute mutes, keeping the evidence")
+check(UI.state.selected ~= pipeId, "a hidden muted problem never stays selected")
+eq(#visibleRows(f), 1, "muted problems are hidden")
+check(f.mutedBtn:IsShown() and f.mutedBtn.label:GetText():find("1", 1, true), "Show muted (1), a secondary control")
+fire(f.mutedBtn)
+eq(#visibleRows(f), 2, "Show muted lists it again")
+fire(f.mutedBtn)
+
+-- Search: by addon, title or the error's text; the selection follows what's visible.
+local other = UI.state.selected
+typeIn(f.search, "nothing matches this")
+eq(#visibleRows(f), 0, "no result")
+eq(UI.state.selected, nil, "and nothing selected")
+eq(UI.state.emptyKind, "noResults", "the no-results state")
+check(f.empty:IsShown() and not f.actions:IsShown(), "the empty state replaces the detail and its actions")
+eq(f.empty.title:GetText(), "No problems match your search", "says so")
+fire(f.empty.action)
+eq(UI.state.query, "", "Clear search")
+eq(UI.state.selected, other, "the first visible problem selected again")
+typeIn(f.search, "core.lua")
+eq(#visibleRows(f), 1, "the error's text is searchable (the stack's file)")
+typeIn(f.search, "test addon")
+eq(#visibleRows(f), 1, "and the addon's title")
+typeIn(f.search, "")
+
+-- Only muted problems.
+for _, p in ipairs(Store.List("session", true)) do Store.SetMuted(p.id, true) end
 UI.Refresh()
-local p = Store.List("all", true)[1]
-ReportUI.OpenFor(p.id)
-local rf = ReportUI.frame()
-check(rf:IsShown(), "Prepare report opens the flow")
--- Tab moves through the four answers, Shift+Tab back, around (#24).
-local function focused()
-    for _, k in ipairs({ "doing", "happened", "expected", "steps" }) do if rf[k]._focus then return k end end
+eq(UI.state.emptyKind, "onlyMuted", "only muted problems: its own empty state")
+fire(f.empty.action)
+eq(UI.state.showMuted, true, "which offers to show them")
+for _, p in ipairs(Store.List("all", true)) do Store.SetMuted(p.id, false) end
+UI.state.showMuted = false
+
+-- History: previous or all sessions.
+fire(f.tabs.buttons[2])
+eq(UI.state.tab, "history", "the History tab")
+check(f.scopeBtn:IsShown(), "with its scope")
+fire(f.scopeBtn)
+eq(UI.state.scope, "previous", "previous session")
+fire(f.scopeBtn)
+fire(f.tabs.buttons[1])
+
+-- Manage: clearing everything asks first.
+local menu = UI.ManageMenu(f.manage)
+local clearAll
+for _, it in ipairs(menu.items) do if it and it.text == "Clear all problems..." then clearAll = it end end
+clearAll.onClick()
+check(f.confirm:IsShown(), "Clear all asks first")
+eq(#Store.List("all", true) > 0, true, "nothing cleared yet")
+fire(f.confirm.no)
+check(not f.confirm:IsShown(), "Cancel keeps everything")
+clearAll.onClick()
+fire(f.confirm.yes)
+eq(#Store.List("all", true), 0, "then clears")
+
+-- The empty state: deliberate, and honest about monitoring.
+eq(UI.state.emptyKind, "none", "no problems: the empty state")
+eq(f.empty.title:GetText(), "No problems detected this session", "says so")
+eq(f.empty.line:GetText(), "Bugsy's keeping watch.", "with a friendly line")
+eq(f.empty.question:GetText(), "Something still isn't working?", "and the way to report anyway")
+eq(f.statusText:GetText(), "Monitoring active", "the footer: monitoring active")
+ns2.Capture.state.mode = "displaced"
+UI.Refresh()
+eq(UI.state.emptyKind, "interrupted", "an empty list never implies healthy monitoring")
+check(f.empty.title:GetText():find("may not be catching", 1, true), "it says Bugsy may not be catching errors")
+check(f.statusText:GetText():find("interrupted", 1, true), "and so does the footer")
+fire(f.statusBtn)
+check(f.statusPanel:IsShown(), "the details (capture mode, limits) behind the status")
+fire(f.statusBtn)
+ns2.Capture.state.mode = "native"
+
+-- After a patch day: an out-of-date addon is marked, and a suggestion (never an action).
+WoW.interfaces.TestAddon = 11507
+WoW.raise("old addon error")
+drain()
+UI.Refresh()
+rows = visibleRows(f)
+check(rows[1].addon:GetText():find("out of date", 1, true), "the row says out of date")
+eq(d.stale.text:GetText(), "Out of date", "the detail marks it")
+check(d.note:IsShown() and d.note:GetText():find("turn it off in the AddOns list", 1, true), "and suggests turning it off until it's updated")
+eq(#WoW.disabledAddOns, 0, "Bugsy never disables an addon itself")
+WoW.interfaces.TestAddon = nil
+
+-- One click to copy: straight to Copy & report.
+local pid = UI.state.selected
+fire(f.copyBtn)
+eq(UI.state.view, "report", "Copy for a bug report opens the flow in the window")
+local dr = UI.state.draft
+eq(dr.step, 3, "at Copy & report")
+local v = ReportUI.view()
+check(v.pages[3]:IsShown() and not v.pages[1]:IsShown(), "that step's page")
+check(v.copyText.edit._text:find("## Bugsy report", 1, true), "the Markdown report, for a GitHub issue")
+check(v.destBox:IsShown() and v.destBox.edit:GetText() == "https://example.org/testaddon", "the addon's own page, from its TOC")
+fire(v.formats.buttons[2])
+check(v.copyText.edit._text:find("Bug report from Bugsy", 1, true), "the short version, for a CurseForge comment")
+check(not v.copyText.edit._text:find("## ", 1, true), "plain text, no Markdown headings")
+fire(v.formats.buttons[3])
+check(v.copyText.edit._text:find('"schema"', 1, true), "JSON as the advanced format")
+fire(v.right)
+check(v.copyText.edit._highlighted, "Select all selects it")
+check(v.copyHint:GetText():find("Ctrl+C", 1, true), "and says to press Ctrl+C")
+for _, s in ipairs({ v.copyHint:GetText(), ReportUI.TEXT.copyHint, ReportUI.TEXT.selected }) do
+    check(not s:lower():find("copied", 1, true) and not s:lower():find("submitted", 1, true), "never claims it was copied or sent: " .. s)
 end
-local function tab(box) box:GetScript("OnTabPressed")(box) end
-for _, k in ipairs({ "doing", "happened", "expected", "steps" }) do rf[k]:ClearFocus() end
-tab(rf.doing)
-eq(focused(), "happened", "Tab: the next answer")
-rf.happened:ClearFocus()
-tab(rf.expected)
-eq(focused(), "steps", "Tab from the third: the fourth")
-rf.steps:ClearFocus()
-tab(rf.steps)
-eq(focused(), "doing", "Tab from the last: around to the first")
-rf.doing:ClearFocus()
+fire(v.left)
+eq(UI.state.view, "problems", "< Problems goes back")
+
+-- The guided flow from a captured problem: the suspect preselected, uncertainty kept.
+ReportUI.OpenFor(pid)
+dr = UI.state.draft
+eq(dr.step, 1, "Prepare report starts at Describe")
+eq(dr.addon, "TestAddon", "the addon Bugsy points at is preselected")
+check(v.guess:GetText():find("cause unconfirmed", 1, true), "saying it's Bugsy's reading")
+check(v.noVisible:IsShown(), "'I didn't notice a visible problem' for a captured error")
+-- Tab through the three answers, Shift+Tab back, around (#24).
+local function tab(field) field.edit:GetScript("OnTabPressed")(field.edit) end
+for _, fl in ipairs({ v.describe, v.expected, v.steps }) do fl.edit:ClearFocus() end
+v.more:setOpen(true)
+tab(v.describe)
+eq(v.expected.edit._focus, true, "Tab: the next answer")
+v.expected.edit:ClearFocus()
 WoW.shift = true
-tab(rf.doing)
-eq(focused(), "steps", "Shift+Tab from the first: around to the last")
-rf.steps:ClearFocus()
-tab(rf.happened)
-eq(focused(), "doing", "Shift+Tab: the previous answer")
-rf.doing:ClearFocus()
+tab(v.describe)
+eq(v.steps.edit._focus, true, "Shift+Tab: around to the last")
+v.steps.edit:ClearFocus()
 WoW.shift = false
-rf.doing:SetText("Looting")
-rf.noProblem:SetChecked(true)
-rf.previewBtn:GetScript("OnClick")(rf.previewBtn)
-check(rf.preview._text:find("Looting", 1, true), "the preview shows the answers")
-check(rf.destination:GetText():find("example.org", 1, true) or rf.destination:GetText():find("doesn't know", 1, true),
-    "a destination or the unknown-destination text")
-rf.formatBtn:GetScript("OnClick")(rf.formatBtn)
-check(rf.preview._text:find('"schema"', 1, true), "JSON on request")
-rf.selectBtn:GetScript("OnClick")(rf.selectBtn)
-check(rf.hint:GetText():find("Bugsy has not sent anything", 1, true), "copy guidance never says sent")
-ReportUI.OpenManual("OtherAddon")
-check(rf.subject:GetText():find("OtherAddon", 1, true), "Report a problem picks the addon")
-rf.next:GetScript("OnClick")(rf.next)
-rf.prev:GetScript("OnClick")(rf.prev)
-rf.happened:SetText("The tab is empty")
-rf.previewBtn:GetScript("OnClick")(rf.previewBtn)
-check(rf.preview._text:find("The tab is empty", 1, true), "the manual report previews")
+typeIn(v.describe, "I opened the bags")
+typeIn(v.expected, "The bags open")
+eq(dr.description, "I opened the bags", "answers are kept in the draft")
+fire(v.right)
+eq(dr.step, 2, "Review report")
+check(v.review.description.body:GetText():find("I opened the bags", 1, true), "the review shows the answers")
+check(v.reviewText.edit._text:find("Description: I opened the bags", 1, true), "and the full report has them")
+fire(v.left)
+eq(dr.step, 1, "Back")
+eq(v.describe.edit:GetText(), "I opened the bags", "the answers survive Back")
+fire(v.right); fire(v.right)
+eq(dr.step, 3, "Next twice: Copy & report")
+check(v.copyText.edit._text:find("I opened the bags", 1, true), "the copy has the answers")
+-- A change after the copy was shown: the copy can never be stale.
+local shown = v.copyText.version
+M.SetDraft(dr, "description", "I opened the bank")
+check(v.copyText.version ~= dr.version, "the shown copy is now out of date")
+ReportUI.SelectAll()
+check(v.copyText.edit._text:find("I opened the bank", 1, true) and not v.copyText.edit._text:find("I opened the bags", 1, true),
+    "Select all re-renders before selecting: never the stale text")
+check(v.copyText.version ~= shown, "a new render")
+-- Correcting the addon changes where to report.
+M.SetDraft(dr, "addon", "OtherAddon")
+UI.Refresh()
+check(not v.destBox:IsShown(), "OtherAddon has no website: the unknown-destination text")
+check(v.dest:GetText():find("doesn't know", 1, true), "explains where to look")
+fire(v.done)
+eq(UI.state.view, "problems", "Done goes back to the problems")
+eq(UI.state.draft, nil, "and the draft is dropped")
+
+-- A manual report: the player chooses; nothing is picked for them.
+ReportUI.OpenManual()
+dr = UI.state.draft
+eq(dr.addon, nil, "no addon chosen for the player")
+eq(v.picker.label:GetText(), "Choose an addon...", "the picker says to choose")
+eq(v.right:IsEnabled(), false, "Review report waits for a choice")
+check(not v.noVisible:IsShown(), "no 'visible problem' box for a manual report")
+fire(v.picker)
+check(v.pickerPanel:IsShown(), "the searchable picker opens")
+typeIn(v.pickerSearch, "other")
+eq(#v.pickerChoices, 1, "search narrows it")
+eq(v.pickerChoices[1].name, "OtherAddon", "by name or title")
+fire(v.pickerRows[1])
+eq(dr.addon, "OtherAddon", "chosen explicitly")
+check(not v.pickerPanel:IsShown(), "the picker closes")
+eq(v.right:IsEnabled(), true, "Review report can go on")
+typeIn(v.describe, "The tab is empty")
+fire(v.right); fire(v.right)
+check(v.copyText.edit._text:find("The tab is empty", 1, true), "the manual report has the answer")
+ReportUI.Back()
 
 -- The compartment entry and the slash help.
 Bugsy_OnAddonCompartmentClick()
 SlashCmdList.BUGSY("help")
 check(chatHas("/bugsy report"), "help lists the commands")
 check(chatHas("/bugsy sound"), "including the sound setting")
+check(chatHas("/bugsy look"), "and the look")
 
 local recorded = Kit.checkMethods({})
-check(recorded >= 40, "the exercise reached the windows (" .. recorded .. " recorded)")
+check(recorded >= 60, "the exercise reached the window (" .. recorded .. " recorded)")
 done("test_ui")

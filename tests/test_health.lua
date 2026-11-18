@@ -123,7 +123,7 @@ eq(lines, 1, "one health line after combat, coalesced")
 for _, s in ipairs(WoW.sounds) do check(false, "a health line never plays the sound") end
 ns.Bugsy.Slash("status")
 check(chatHas("received a message saying"), "/bugsy status shows it")
-check(ns.UI.StatusText():find("may be paused", 1, true), "the window's status line points to it")
+check(ns.UI.StatusText():find("may have paused", 1, true), "the window's status line points to it")
 
 -- #11 ---------------------------------------------------------------------------------
 

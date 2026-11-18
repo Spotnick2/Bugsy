@@ -31,6 +31,10 @@ local function resetBugsy()
     WoW.playerName, WoW.realm = "Karuzo", "Morphisto"
     WoW.lines = {}
     WoW.shift = false
+    WoW.interfaces, WoW.disabledAddOns = {}, {}
+    UISpecialFrames = {}
+    BugsyFrame = nil
+    GlassUI = nil
 end
 table.insert(WoW.onReset, resetBugsy)
 resetBugsy()
@@ -111,9 +115,18 @@ local function addon(nameOrIndex)
     for _, a in ipairs(WoW.addons) do if a.name == nameOrIndex then return a end end
 end
 C_AddOns = {
-    GetAddOnMetadata = function(name, field) local a = addon(name); return a and a.meta[field] end,
+    GetAddOnMetadata = function(name, field)
+        local a = addon(name)
+        if not a then return nil end
+        if field == "Title" then return a.meta.Title or a.title end   -- the TOC Title, as the client answers
+        return a.meta[field]
+    end,
     IsAddOnLoaded = function(name) local a = addon(name); return a and a.loaded or false, a and a.loaded or false end,
     GetNumAddOns = function() return #WoW.addons end,
+    -- #28: the interface an addon was made for (WoW.interfaces[name], else the client's),
+    -- and DisableAddOn recorded (Bugsy must never call it: it only suggests).
+    GetAddOnInterfaceVersion = function(name) return WoW.interfaces[name] or 16001 end,
+    DisableAddOn = function(name) WoW.disabledAddOns[#WoW.disabledAddOns + 1] = name end,
     GetAddOnInfo = function(i)
         local a = addon(i)
         if a then return a.name, a.title, "", true, nil, "INSECURE" end
@@ -185,9 +198,11 @@ function WoW.newLDBI()
 end
 local function resetLibs()
     WoW.ldb, WoW.ldbi = WoW.newLDB(), WoW.newLDBI()
+    WoW.libGlass, WoW.libGlassMinor, WoW.glassCalls, WoW.glassFail = nil, nil, 0, nil
     LibStub = setmetatable({}, { __call = function(_, major, silent)
         if major == "LibDataBroker-1.1" then return WoW.ldb end
         if major == "LibDBIcon-1.0" then return WoW.ldbi end
+        if major == "LibGlass-1.0" and WoW.libGlass then return WoW.libGlass, WoW.libGlassMinor end
         if not silent then error("Cannot find a library instance of " .. tostring(major)) end
     end })
     -- The client's minimap (in the dump), for Bugsy's own button: its centre in UI units
@@ -207,4 +222,45 @@ resetLibs()
 -- The other error collector's public names (Capture.COLLECTOR must match; test_collector checks).
 COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
 
-Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip", "Minimap" })
+
+-- Another addon's LibGlass-1.0 (#28: borrowed, never embedded): a recording fake with the
+-- calls Theme makes. Every call counts in WoW.glassCalls (Theme must call it only while a
+-- window is built); WoW.glassFail = "Apply" (or another name) makes that call throw.
+function WoW.newLibGlass(minor)
+    local lib = {}
+    function lib:New(opts)
+        local inst = { preset = opts and opts.preset, SIZES = { thin_small = { mask = "mask", maskMargin = 4 } } }
+        local function rec(name, fn)
+            inst[name] = function(...)
+                WoW.glassCalls = WoW.glassCalls + 1
+                if WoW.glassFail == name then error("LibGlass: " .. name .. " failed") end
+                if fn then return fn(...) end
+            end
+        end
+        rec("Apply", function(host) return { mask = newWidget("MaskTexture", host) } end)
+        rec("Mask", function(host) return newWidget("MaskTexture", host) end)
+        for _, n in ipairs({ "Reflect", "SetSurfaceAlpha", "SetSurfaceTint", "SetWash", "SetEdge" }) do rec(n) end
+        return inst
+    end
+    WoW.libGlass, WoW.libGlassMinor = lib, minor or 12
+    return lib
+end
+
+-- Glass UI's suite (API 1): Theme answers WoW.suiteAnswer (a table, or nil and a reason);
+-- every Report is recorded in WoW.suiteReports.
+function WoW.newSuite()
+    WoW.suiteReports, WoW.suiteAsked = {}, 0
+    WoW.suiteAnswer = { name = "pearl", preset = "pearl" }
+    GlassUI = { Suite = {
+        API = 1,
+        Theme = function(addon)
+            WoW.suiteAsked = WoW.suiteAsked + 1
+            if type(WoW.suiteAnswer) == "table" then return { name = WoW.suiteAnswer.name, preset = WoW.suiteAnswer.preset } end
+            return nil, WoW.suiteAnswer
+        end,
+        Report = function(addon, state) WoW.suiteReports[#WoW.suiteReports + 1] = { addon = addon, state = state } end,
+    } }
+    return GlassUI.Suite
+end
+
+Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip", "Minimap", "GlassUI", "UISpecialFrames", "BugsyFrame" })

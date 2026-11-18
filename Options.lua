@@ -172,6 +172,34 @@ local function buildPage()
     page.report:SetPoint("LEFT", page.open, "RIGHT", 8, 0)
     y = y - 40
 
+    y = heading(canvas, y, "Appearance")
+    page.looks = {}
+    for _, key in ipairs(ns.Theme.CHOICES) do
+        local rb = checkButton(canvas, true)
+        rb:SetPoint("TOPLEFT", canvas, "TOPLEFT", 20, y)
+        rb:SetScript("OnClick", function() ns.Theme.SetChoice(key); Options.Refresh() end)
+        rb.label = label(canvas, ns.Theme.LABELS[key])
+        rb.label:SetPoint("LEFT", rb, "RIGHT", 4, 0)
+        rb.key = key
+        page.looks[#page.looks + 1] = rb
+        y = y - 22
+    end
+    page.lookNote = label(canvas, "", "GameFontHighlightSmall", 540)
+    page.lookNote:SetPoint("TOPLEFT", canvas, "TOPLEFT", 48, y)
+    y = y - 34
+    refreshers[#refreshers + 1] = function()
+        local T = ns.Theme
+        local choice = T.Choice()
+        for _, rb in ipairs(page.looks) do
+            rb:SetChecked(rb.key == choice)
+            local ok = (rb.key == "follow" and T.Suite() ~= nil) or (rb.key == "pearl" and T.PearlAvailable()) or rb.key == "forever"
+            if ok then rb:Enable(); rb.label:SetAlpha(1) else rb:Disable(); rb.label:SetAlpha(0.45) end
+        end
+        local name, note = T.Describe()
+        page.lookNote:SetText("Bugsy's window: " .. name .. "." .. (note and (" " .. note) or "")
+            .. (T.Suite() and "" or " Follow Glass UI appears when Glass UI is loaded."))
+    end
+
     y = heading(canvas, y, "Notifications")
     y = toggle(canvas, y, "notices", "A chat line when a new problem is caught",
         "At most one every 10 seconds, and held until combat ends.")

@@ -102,11 +102,17 @@ local function explanationsFor(p, newest)
     return Patterns.match(o, build)
 end
 
+-- The player's answers. `description` is the window's one "Describe the problem" field
+-- (#28); `doing` and `happened` stay readable for older callers. `addon` is the addon the
+-- player chose (or kept) in the report flow: their reading, kept apart from Bugsy's
+-- attribution, which the report keeps as it is.
 local function playerSection(answers)
     answers = answers or {}
     return {
+        description = answer(answers.description),
         doing = answer(answers.doing), happened = answer(answers.happened), expected = answer(answers.expected),
         steps = answer(answers.steps), noVisibleProblem = answers.noVisibleProblem == true or nil,
+        addon = type(answers.addon) == "string" and Context.capped(answers.addon, Context.NAME_MAX) or nil,
     }
 end
 
@@ -151,8 +157,14 @@ function Report.ForProblem(p, answers)
     for _, a in ipairs(p.addons or {}) do names[#names + 1] = a.name end
     r.addons = addonsSection(names)
     local suspect = r.attribution.suspect and r.attribution.suspect.addon
-    r.destination = destinationFor(suspect)
     r.player = playerSection(answers)
+    -- where to report: the addon the player chose, else Bugsy's suspect (#28)
+    r.destination = destinationFor(r.player.addon or suspect)
+    if r.player.addon then
+        local seen
+        for _, n in ipairs(names) do if n == r.player.addon then seen = true end end
+        if not seen then table.insert(names, 1, r.player.addon); r.addons = addonsSection(names) end
+    end
     r.explanations = explanationsFor(p, newest)
     for _, e in ipairs(r.explanations) do if e.noise then r.problem.noise = true end end
     for _, o in ipairs(occurrences) do
@@ -404,9 +416,14 @@ function Report.Markdown(r)
     end
     add("")
     local pl = r.player or {}
-    if pl.doing or pl.happened or pl.expected or pl.steps or pl.noVisibleProblem then
+    if pl.description or pl.doing or pl.happened or pl.expected or pl.steps or pl.noVisibleProblem then
         add("### What the player saw")
         if pl.noVisibleProblem then add("- No visible problem noticed.") end
+        if pl.description then add("- Description: " .. fieldText(pl.description)) end
+        if pl.addon and not (r.attribution and r.attribution.suspect and r.attribution.suspect.addon == pl.addon)
+            and p.kind ~= "manual" then
+            add("- The player names: " .. pl.addon)
+        end
         if pl.doing then add("- Doing: " .. fieldText(pl.doing)) end
         if pl.happened then add("- Happened: " .. fieldText(pl.happened)) end
         if pl.expected then add("- Expected: " .. fieldText(pl.expected)) end
@@ -486,6 +503,59 @@ function Report.Markdown(r)
         add("- " .. concat(nots, " · "))
     end
     return concat(L, "\n")
+end
+
+-- The short plain-text version, for a CurseForge comment (#28: the owner's priority is a
+-- convenient paste; CurseForge's comment box doesn't render Markdown). From an already
+-- redacted report. At most SHORT_MAX characters; the stack keeps its top lines.
+Report.SHORT_MAX = 1800
+Report.SHORT_STACK = 8
+function Report.Short(r)
+    local L = {}
+    local function add(s) L[#L + 1] = s end
+    local p, c, a = r.problem or {}, r.client or {}, r.attribution or {}
+    local pl = r.player or {}
+    local versions = {}
+    for _, ad in ipairs(r.addons or {}) do versions[ad.name] = ad.version end
+    local who = pl.addon or (a.suspect and a.suspect.addon) or (r.addons and r.addons[1] and r.addons[1].name)
+    add("Bug report from Bugsy: " .. (p.kind == "manual" and "reported by the player" or tostring(p.title)))
+    if who then
+        local how = pl.addon and (p.kind == "manual" and "" or " (the player's choice)")
+            or (a.suspect and (" (appears involved, " .. tostring(a.suspect.confidence) .. " confidence)") or "")
+        add("Addon: " .. who .. " " .. (versions[who] or "?") .. how)
+    else
+        add("Addon: unknown")
+    end
+    if p.kind ~= "manual" then
+        add(format("Seen %s%d time%s, last %s", p.countIncomplete and "at least " or "", p.count or 0,
+            (p.count == 1) and "" or "s", when(p.lastSeen)))
+    end
+    add(format("Client: WoW Forever %s (%s), %s", tostring(c.version), tostring(c.build), tostring(c.locale)))
+    if pl.noVisibleProblem then add("No visible problem noticed.") end
+    if pl.description then add("What happened: " .. fieldText(pl.description)) end
+    if pl.expected then add("Expected: " .. fieldText(pl.expected)) end
+    if pl.steps then add("Steps: " .. fieldText(pl.steps)) end
+    local o = r.occurrences and r.occurrences[#r.occurrences]
+    if o and p.kind ~= "manual" then
+        add("")
+        add("Error: " .. fieldText(o.message))
+        local stack = fieldText(o.stack)
+        local lines, n = {}, 0
+        for line in stack:gmatch("[^\n]+") do
+            n = n + 1
+            if n <= Report.SHORT_STACK then lines[#lines + 1] = line end
+        end
+        if #lines > 0 then
+            add("Stack:")
+            for _, l in ipairs(lines) do add("  " .. l) end
+            if n > #lines then add("  (" .. (n - #lines) .. " more lines in the full report)") end
+        end
+    end
+    local text = concat(L, "\n")
+    if #text > Report.SHORT_MAX then
+        text = text:sub(1, Report.SHORT_MAX - 40):gsub("[\192-\255][\128-\191]*$", "") .. "\n(cut: see the full report)"
+    end
+    return text
 end
 
 -- The texts the report window offers: redacted, fitted. Returns markdown, json; or nil, reason.
