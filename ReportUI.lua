@@ -229,7 +229,7 @@ local function buildDescribe(v, page)
 end
 
 local function buildReview(v, page)
-    v.reviewScroll, v.reviewChild = W.Scroll(page)
+    v.reviewScroll, v.reviewChild = W.Scroll(page, function() ReportUI.Relayout(page) end)
     v.reviewScroll:SetPoint("TOPLEFT")
     v.reviewScroll:SetPoint("BOTTOMRIGHT", -22, 0)
     local c = v.reviewChild
@@ -317,7 +317,7 @@ function ReportUI.Build(f, body)
         v.pages[i] = page
     end
     -- Describe scrolls: with its details open it is taller than the smallest window (Codex, #30).
-    v.describeScroll, v.describeChild = W.Scroll(v.pages[1])
+    v.describeScroll, v.describeChild = W.Scroll(v.pages[1], function() ReportUI.Relayout(v.pages[1]) end)
     v.describeScroll:SetPoint("TOPLEFT")
     v.describeScroll:SetPoint("BOTTOMRIGHT", -22, 0)
     buildDescribe(v, v.describeChild)
@@ -520,6 +520,11 @@ function ReportUI.Refresh()
     -- Opened straight at Copy, the top's "< Problems" is the way back: no second one (#31).
     v.left:SetShown(not (d.direct and d.step == 3))
     v.done:SetShown(d.step == 3)
+end
+
+-- A Describe or Review page got its width (#36): measured again, only while it's showing.
+function ReportUI.Relayout(page)
+    if view and page:IsVisible() and draft() then ReportUI.Refresh() end
 end
 
 function ReportUI.frame() return ns.UI.frame() end

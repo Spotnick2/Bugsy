@@ -140,6 +140,28 @@ check(not d.sections.activity:IsShown(), "no breadcrumbs: no Recent activity (no
 check(d.sections.tech:IsShown() and d.sections.occurrences:IsShown(), "Technical details and Occurrences sections")
 check(not d.note:IsShown(), "an up-to-date addon: no out-of-date note")
 
+-- A wrapped title pushes the meta line down, also when the column gets its width after
+-- the layout: after a look change the scroll child is still 10 px wide when the title is
+-- measured (#36). In game it then measures as one line, unwrapped.
+d:SetWidth(10)
+d.title.GetStringHeight = function(s)
+    local w = d:GetWidth()
+    if w <= 10 then return 18 end             -- the placeholder width: not laid out yet
+    return 18 * math.min(3, math.ceil(#(s._text or "") * 9 / w))
+end
+UI.Refresh()
+local function gap()
+    local ty = select(5, d.title:GetPoint(1))
+    local my = select(5, d.meta:GetPoint(1))
+    return ty - my
+end
+eq(gap(), 18 + 6, "measured before the column has a width: one line")
+f.detailScroll:GetScript("OnSizeChanged")(f.detailScroll, 300, 400)
+eq(d:GetWidth(), 300, "the column gets the scroll frame's width")
+check(d.title:GetStringHeight() > 18, "(the title wraps at that width)")
+eq(gap(), d.title:GetStringHeight() + 6, "laid out again: the meta line sits under the wrapped title")
+d.title.GetStringHeight = nil
+
 -- Copy details: the technical details opened and selected for Ctrl+C.
 UI.CopyDetails()
 check(d.sections.tech.open, "Copy details opens the technical details")
@@ -303,6 +325,16 @@ fire(v.right)
 eq(dr.step, 2, "Review report")
 check(v.review.description.body:GetText():find("I opened the bags", 1, true), "the review shows the answers")
 check(v.reviewText.edit._text:find("Description: I opened the bags", 1, true), "and the full report has them")
+-- The page measured again when it gets its width (#36), and a hidden page isn't.
+local refreshes, realRefresh = 0, ReportUI.Refresh
+ReportUI.Refresh = function(...) refreshes = refreshes + 1; return realRefresh(...) end
+v.reviewScroll:GetScript("OnSizeChanged")(v.reviewScroll, v.reviewChild:GetWidth() + 50, 300)
+eq(refreshes, 1, "Review laid out again at its new width")
+v.reviewScroll:GetScript("OnSizeChanged")(v.reviewScroll, v.reviewChild:GetWidth(), 360)
+eq(refreshes, 1, "not for a height change alone")
+v.describeScroll:GetScript("OnSizeChanged")(v.describeScroll, v.describeChild:GetWidth() + 50, 300)
+eq(refreshes, 1, "nor for the hidden Describe page")
+ReportUI.Refresh = realRefresh
 fire(v.left)
 eq(dr.step, 1, "Back")
 eq(v.describe.edit:GetText(), "I opened the bags", "the answers survive Back")
