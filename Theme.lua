@@ -50,7 +50,7 @@ local failures = {}           -- bounded: { op, text, at }
 
 local FOREVER = {
     text = { 0.93, 0.89, 0.80 }, heading = { 1, 0.82, 0 }, muted = { 0.64, 0.60, 0.52 },
-    faint = { 0.45, 0.42, 0.36 }, accent = { 1, 0.82, 0 }, link = { 0.95, 0.80, 0.45 },
+    faint = { 0.45, 0.42, 0.36 }, accent = { 1, 0.82, 0 }, onAccent = { 0.12, 0.09, 0.02 }, link = { 0.95, 0.80, 0.45 },
     ok = { 0.30, 0.85, 0.35 }, warn = { 1, 0.72, 0.20 }, bad = { 1, 0.30, 0.25 },
     window = { 0.07, 0.065, 0.06, 0.96 }, header = { 0, 0, 0, 0.35 },
     pane = { 0, 0, 0, 0.38 }, paneEdge = { 0.38, 0.33, 0.24, 0.9 },
@@ -65,7 +65,7 @@ local FOREVER = {
 
 local GLASS = {
     text = { 0.94, 0.95, 0.97 }, heading = { 1, 1, 1 }, muted = { 0.70, 0.73, 0.78 },
-    faint = { 0.50, 0.53, 0.58 }, accent = { 0.98, 0.80, 0.36 }, link = { 0.80, 0.88, 1 },
+    faint = { 0.50, 0.53, 0.58 }, accent = { 0.98, 0.80, 0.36 }, onAccent = { 0.10, 0.09, 0.06 }, link = { 0.80, 0.88, 1 },
     ok = { 0.35, 0.88, 0.45 }, warn = { 1, 0.75, 0.30 }, bad = { 1, 0.38, 0.35 },
     window = { 0.06, 0.07, 0.085, 0.90 }, header = { 1, 1, 1, 0.03 },
     pane = { 0.072, 0.082, 0.10, 0.94 }, paneEdge = { 0.85, 0.88, 0.95, 0.18 },
@@ -286,8 +286,10 @@ function Theme.Window(frame, header)
         local backing = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
         backing:SetAllPoints(frame)
         backing:AddMaskTexture(g.mask)
-        backing:SetColorTexture(0.03, 0.03, 0.035, 0.55)
-        Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.78)
+        -- Opaque enough that nameplates and names behind it don't read through the text
+        -- (#31, seen in game at 0.55 under 0.78).
+        backing:SetColorTexture(0.03, 0.03, 0.035, 0.85)
+        Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.86)
         Glass.SetWash(g, 0)
         Glass.SetSurfaceAlpha(g, "rim", 0.12)
         Glass.SetSurfaceAlpha(g, "dark", 0.55)

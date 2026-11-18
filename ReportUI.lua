@@ -497,6 +497,7 @@ function ReportUI.Refresh()
     for i, b in ipairs(v.stepBtns) do
         local c = i == d.step and C.accent or C.faint
         b.circle:SetVertexColor(c[1], c[2], c[3], i == d.step and 0.9 or 0.5)
+        Theme.TextColor(b.num, i == d.step and "onAccent" or "heading")   -- readable on the accent (#31)
         Theme.TextColor(b.text, i == d.step and "heading" or "muted")
     end
     if d.step == 1 then
@@ -513,8 +514,10 @@ function ReportUI.Refresh()
         refreshCopy(v, d)
         v.right:setLabel(L["Select all"])
         v.right:setActive(M.CopyText(d, d.format) ~= nil)
-        v.left:setLabel(d.direct and L["< Problems"] or L["< Back"])
+        v.left:setLabel(L["< Back"])
     end
+    -- Opened straight at Copy, the top's "< Problems" is the way back: no second one (#31).
+    v.left:SetShown(not (d.direct and d.step == 3))
     v.done:SetShown(d.step == 3)
 end
 

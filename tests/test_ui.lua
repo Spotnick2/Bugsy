@@ -241,6 +241,8 @@ local dr = UI.state.draft
 eq(dr.step, 3, "at Copy & report")
 local v = ReportUI.view()
 check(v.pages[3]:IsShown() and not v.pages[1]:IsShown(), "that step's page")
+check(not v.left:IsShown(), "no second '< Problems' in the bottom bar: the top one goes back (#31)")
+eq(UI.frame():GetFrameStrata(), "DIALOG", "the window is over unit frames and bars (#31)")
 check(v.copyText.edit._text:find("## Bugsy report", 1, true), "the Markdown report, for a GitHub issue")
 check(v.destBox:IsShown() and v.destBox.edit:GetText() == "https://example.org/testaddon", "the addon's own page, from its TOC")
 fire(v.formats.buttons[2])
@@ -273,6 +275,18 @@ UI.Refresh()
 check(v.describe:GetParent() == v.describeChild and v.describeChild:GetParent() == v.describeScroll,
     "Describe's fields are in a scroll frame")
 check(v.describeChild:GetHeight() > 460 - 48 - 30 - 92 - 46, "its content is measured taller than the page at 760x460")
+-- A section always has its own height, open or closed (#31: without one, anchored by
+-- TOPLEFT and RIGHT, the client placed it over Describe's other controls).
+eq(v.more:GetHeight(), v.more:height(), "the open section's frame is as tall as its header and body")
+check(v.more:GetHeight() > 26, "taller than its header when open")
+v.more:setOpen(false)
+eq(v.more:GetHeight(), 26, "the closed section: its header's height")
+v.more:setOpen(true)
+local stepNum = { v.stepBtns[1].num:GetTextColor() }
+local onAccent = ns.Theme.C.onAccent
+check(stepNum[1] == onAccent[1] and stepNum[2] == onAccent[2] and stepNum[3] == onAccent[3],
+    "the current step's number is dark on its accent circle (#31)")
+check(v.left:IsShown(), "the bottom bar's left button is back in the guided flow")
 tab(v.describe)
 eq(v.expected.edit._focus, true, "Tab: the next answer")
 v.expected.edit:ClearFocus()

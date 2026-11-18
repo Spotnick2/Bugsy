@@ -354,11 +354,17 @@ function W.Section(parent, title, onToggle)
     s.body:SetPoint("TOPLEFT", s.header, "BOTTOMLEFT", 0, -4)
     s.body:SetPoint("TOPRIGHT", s.header, "BOTTOMRIGHT", 0, -4)
     s.title = title
+    -- The section always has a height: anchored by TOPLEFT and RIGHT (the right *middle*)
+    -- without one, the client derives it from those two points and the section lands in
+    -- the wrong place (#31, seen in game: Describe's details over its other controls).
+    s:SetHeight(26)
     function s.refreshHeader(self)
         self.header:setLabel(self.title)
         self.chevron:SetTexture(self.open and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
         self.body:SetShown(self.open)
+        self:SetHeight(self:height())
     end
+    s.body:SetScript("OnSizeChanged", function() s:SetHeight(s:height()) end)
     function s.setTitle(self, t) self.title = t; self:refreshHeader() end
     function s.setOpen(self, on) self.open = on and true or false; self:refreshHeader() end
     -- The section's height: the header, and the body when open.

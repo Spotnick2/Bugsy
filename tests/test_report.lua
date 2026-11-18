@@ -125,6 +125,12 @@ check(md:find("Possible explanation", 1, true) == nil, "no pattern matched, no e
 check(md:find("not a verdict", 1, true), "attribution is worded as a reading")
 check(json:find("| pipe", 1, true), "a pipe stays literal in the exported text")
 check(md:find("Captured with TestAddon 1.2.3", 1, true), "each occurrence names the versions it was captured with")
+-- The client's debugstack ends with a newline: it never becomes indented blank lines (#31).
+local trailing = Report.ForProblem(p)
+for _, o in ipairs(trailing.occurrences) do o.stack = "[Interface/AddOns/TestAddon/Core.lua]:42: in function 'f'\n[C]: ?\n" end
+local trailingMd = Report.Markdown(trailing)
+check(trailingMd:find("    [C]: ?", 1, true), "the stack is there")
+check(not trailingMd:find("\n    \n", 1, true), "no indented blank line after the stack's trailing newline (#31)")
 
 -- An upgrade after the capture: the evidence keeps its version, the installed one
 -- is labelled as such (Codex, PR #2).

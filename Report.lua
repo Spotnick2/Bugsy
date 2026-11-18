@@ -380,7 +380,8 @@ local function fieldText(v)
     return "[none]"
 end
 
-local function indent(s) return "    " .. s:gsub("\n", "\n    ") end
+-- A trailing newline (a stack's) would become an indented blank line (#31).
+local function indent(s) return "    " .. s:gsub("%s+$", ""):gsub("\n", "\n    ") end
 
 function Report.Markdown(r)
     local L = {}
