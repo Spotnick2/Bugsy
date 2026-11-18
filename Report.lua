@@ -380,7 +380,8 @@ local function fieldText(v)
     return "[none]"
 end
 
-local function indent(s) return "    " .. s:gsub("\n", "\n    ") end
+-- A trailing newline (a stack's) would become an indented blank line (#31).
+local function indent(s) return "    " .. s:gsub("%s+$", ""):gsub("\n", "\n    ") end
 
 function Report.Markdown(r)
     local L = {}
@@ -497,10 +498,16 @@ function Report.Markdown(r)
     for _, red in ipairs(r.privacy and r.privacy.redactions or {}) do
         nots[#nots + 1] = (red == "player-name" and "your character name" or "your realm name") .. " replaced"
     end
-    for _, l in ipairs(r.capture and r.capture.limits or {}) do nots[#nots + 1] = l end
     if #nots > 0 then
         add("### Not included")
         add("- " .. concat(nots, " · "))
+    end
+    -- Capture's caveats are sentences: one bullet each, not one long line (#31).
+    local limits = r.capture and r.capture.limits or {}
+    if #limits > 0 then
+        if #nots > 0 then add("") end
+        add("### Capture limits")
+        for _, l in ipairs(limits) do add("- " .. tostring(l)) end
     end
     return concat(L, "\n")
 end

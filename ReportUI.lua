@@ -18,7 +18,8 @@ ns.ReportUI = ReportUI
 ReportUI.TEXT = {
     privacy = L["Bugsy replaces your own character and realm names. Error text and context can still contain other players' names or messages: look before you paste."],
     unknownDestination = L["Bugsy doesn't know where this addon takes reports. Look on its download page (CurseForge, Wago) or its website for an issue tracker or comments."],
-    copyHint = L["Select all, then press Ctrl+C, and paste it where the author asked. Nothing is sent automatically."],
+    -- The bottom bar already says nothing is sent (#31: seen twice in game).
+    copyHint = L["Select all, then press Ctrl+C, and paste it where the author asked."],
     selected = L["Selected: press Ctrl+C now, then paste it into the issue or comment."],
 }
 ReportUI.FORMATS = {
@@ -107,9 +108,9 @@ local function buildPicker(v, parent)
     glass:SetSize(14, 14)
     glass:SetPoint("LEFT", 10, 0)
     local arrow = v.picker:CreateTexture(nil, "OVERLAY")
-    arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
-    arrow:SetSize(20, 20)
-    arrow:SetPoint("RIGHT", -4, 0)
+    Theme.DropArrow(arrow)
+    arrow:SetPoint("RIGHT", -8, 0)
+    v.pickerArrow = arrow
 
     local panel = G("CreateFrame")("Frame", nil, v)
     panel:SetPoint("TOPLEFT", v.picker, "BOTTOMLEFT", 0, -2)
@@ -497,6 +498,7 @@ function ReportUI.Refresh()
     for i, b in ipairs(v.stepBtns) do
         local c = i == d.step and C.accent or C.faint
         b.circle:SetVertexColor(c[1], c[2], c[3], i == d.step and 0.9 or 0.5)
+        Theme.TextColor(b.num, i == d.step and "onAccent" or "heading")   -- readable on the accent (#31)
         Theme.TextColor(b.text, i == d.step and "heading" or "muted")
     end
     if d.step == 1 then
@@ -513,8 +515,10 @@ function ReportUI.Refresh()
         refreshCopy(v, d)
         v.right:setLabel(L["Select all"])
         v.right:setActive(M.CopyText(d, d.format) ~= nil)
-        v.left:setLabel(d.direct and L["< Problems"] or L["< Back"])
+        v.left:setLabel(L["< Back"])
     end
+    -- Opened straight at Copy, the top's "< Problems" is the way back: no second one (#31).
+    v.left:SetShown(not (d.direct and d.step == 3))
     v.done:SetShown(d.step == 3)
 end
 

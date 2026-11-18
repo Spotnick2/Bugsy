@@ -492,7 +492,7 @@ local function buildWindow()
     local f = create("Frame", nil, G("UIParent"))
     f:Hide()
     building = f
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("DIALOG")          -- over unit frames and bars (#31, seen in game at HIGH)
     f:SetToplevel(true)
     f:SetMovable(true)
     f:SetResizable(true)

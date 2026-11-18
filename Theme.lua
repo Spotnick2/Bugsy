@@ -50,7 +50,7 @@ local failures = {}           -- bounded: { op, text, at }
 
 local FOREVER = {
     text = { 0.93, 0.89, 0.80 }, heading = { 1, 0.82, 0 }, muted = { 0.64, 0.60, 0.52 },
-    faint = { 0.45, 0.42, 0.36 }, accent = { 1, 0.82, 0 }, link = { 0.95, 0.80, 0.45 },
+    faint = { 0.45, 0.42, 0.36 }, accent = { 1, 0.82, 0 }, onAccent = { 0.12, 0.09, 0.02 }, link = { 0.95, 0.80, 0.45 },
     ok = { 0.30, 0.85, 0.35 }, warn = { 1, 0.72, 0.20 }, bad = { 1, 0.30, 0.25 },
     window = { 0.07, 0.065, 0.06, 0.96 }, header = { 0, 0, 0, 0.35 },
     pane = { 0, 0, 0, 0.38 }, paneEdge = { 0.38, 0.33, 0.24, 0.9 },
@@ -65,7 +65,7 @@ local FOREVER = {
 
 local GLASS = {
     text = { 0.94, 0.95, 0.97 }, heading = { 1, 1, 1 }, muted = { 0.70, 0.73, 0.78 },
-    faint = { 0.50, 0.53, 0.58 }, accent = { 0.98, 0.80, 0.36 }, link = { 0.80, 0.88, 1 },
+    faint = { 0.50, 0.53, 0.58 }, accent = { 0.98, 0.80, 0.36 }, onAccent = { 0.10, 0.09, 0.06 }, link = { 0.80, 0.88, 1 },
     ok = { 0.35, 0.88, 0.45 }, warn = { 1, 0.75, 0.30 }, bad = { 1, 0.38, 0.35 },
     window = { 0.06, 0.07, 0.085, 0.90 }, header = { 1, 1, 1, 0.03 },
     pane = { 0.072, 0.082, 0.10, 0.94 }, paneEdge = { 0.85, 0.88, 0.95, 0.18 },
@@ -286,8 +286,10 @@ function Theme.Window(frame, header)
         local backing = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
         backing:SetAllPoints(frame)
         backing:AddMaskTexture(g.mask)
-        backing:SetColorTexture(0.03, 0.03, 0.035, 0.55)
-        Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.78)
+        -- Opaque enough that nameplates and names behind it don't read through the text
+        -- (#31, seen in game at 0.55 under 0.78).
+        backing:SetColorTexture(0.03, 0.03, 0.035, 0.85)
+        Glass.SetSurfaceTint(g, 0.085, 0.095, 0.115, 0.86)
         Glass.SetWash(g, 0)
         Glass.SetSurfaceAlpha(g, "rim", 0.12)
         Glass.SetSurfaceAlpha(g, "dark", 0.55)
@@ -320,6 +322,46 @@ function Theme.Window(frame, header)
         frame.border = border
     else
         frame.border = { edges = edges(frame, C.controlEdge, "BORDER") }
+    end
+end
+
+-- Pearl's scroll bar: a slim thumb on a faint track, no arrows; the client's gold arrows and
+-- knob clash with glass (#31). Forever keeps the client's own, which suits it. Blizzard shows
+-- the arrow buttons again on every range change, so they're made invisible and click-through
+-- rather than hidden; the mouse wheel and the thumb still scroll.
+function Theme.ScrollBar(scroll)
+    local bar = scroll and scroll.ScrollBar
+    if effective ~= "glass" or not bar then return end
+    local C = Theme.C
+    for _, key in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
+        local b = bar[key]
+        if b then b:SetAlpha(0); b:EnableMouse(false) end
+    end
+    if bar.ThumbTexture then
+        bar.ThumbTexture:SetColorTexture(C.text[1], C.text[2], C.text[3], 0.35)
+        bar.ThumbTexture:SetSize(5, 36)
+    end
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetColorTexture(1, 1, 1, 0.06)
+    track:SetWidth(3)
+    track:SetPoint("TOP", bar, "TOP", 0, 0)
+    track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
+    bar.glassTrack = track
+end
+
+-- A dropdown's arrow on `tex`: the client's gold scroll button in Forever; in Pearl, its
+-- plain arrow icon, desaturated in the look's muted colour (#31).
+function Theme.DropArrow(tex)
+    if effective == "glass" then
+        local c = Theme.C.muted
+        tex:SetTexture("Interface\\Buttons\\SquareButtonTextures")
+        tex:SetTexCoord(0.45312500, 0.64062500, 0.20312500, 0.01562500)   -- Blizzard's "DOWN"
+        tex:SetDesaturated(true)
+        tex:SetVertexColor(c[1], c[2], c[3])
+        tex:SetSize(12, 12)
+    else
+        tex:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+        tex:SetSize(20, 20)
     end
 end
 

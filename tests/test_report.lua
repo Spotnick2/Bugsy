@@ -125,6 +125,18 @@ check(md:find("Possible explanation", 1, true) == nil, "no pattern matched, no e
 check(md:find("not a verdict", 1, true), "attribution is worded as a reading")
 check(json:find("| pipe", 1, true), "a pipe stays literal in the exported text")
 check(md:find("Captured with TestAddon 1.2.3", 1, true), "each occurrence names the versions it was captured with")
+-- The client's debugstack ends with a newline: it never becomes indented blank lines (#31).
+local trailing = Report.ForProblem(p)
+for _, o in ipairs(trailing.occurrences) do o.stack = "[Interface/AddOns/TestAddon/Core.lua]:42: in function 'f'\n[C]: ?\n" end
+local trailingMd = Report.Markdown(trailing)
+check(trailingMd:find("    [C]: ?", 1, true), "the stack is there")
+check(not trailingMd:find("\n    \n", 1, true), "no indented blank line after the stack's trailing newline (#31)")
+-- Capture's caveats are sentences: each its own bullet, not joined into Not included (#31).
+local limited = Report.ForProblem(p)
+limited.capture.limits = { "First caveat.", "Second caveat." }
+local limitedMd = Report.Markdown(limited)
+check(limitedMd:find("### Capture limits\n- First caveat.\n- Second caveat.", 1, true), "each capture caveat is its own bullet")
+check(not limitedMd:find("· First caveat", 1, true), "not joined into Not included")
 
 -- An upgrade after the capture: the evidence keeps its version, the installed one
 -- is labelled as such (Codex, PR #2).
