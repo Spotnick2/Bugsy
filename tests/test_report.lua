@@ -133,7 +133,20 @@ local upMd = Report.Render(Report.ForProblem(p))
 check(upMd:find("Captured with TestAddon 1.2.3", 1, true), "the stack is still tied to 1.2.3")
 check(upMd:find("Installed when this report was prepared: TestAddon 2.0.0", 1, true), "2.0.0 is labelled as installed now")
 check(not upMd:find("**TestAddon 2.0.0**", 1, true), "the heading does not tie the evidence to 2.0.0")
+-- The short text too (Codex, #30): the version the error was captured with, the build, and
+-- the installed one labelled apart.
+local upShort = Report.Short(Report.ForProblem(p))
+check(upShort:find("Addon: TestAddon 1.2.3 (appears involved", 1, true), "the short text ties the error to 1.2.3")
+check(upShort:find("Installed now: TestAddon 2.0.0", 1, true), "and labels 2.0.0 as installed now")
+check(upShort:find("Error %(build %d+, "), "the error names its build")
 WoW.addons[1].meta.Version = "1.2.3"
+local sameShort = Report.Short(Report.ForProblem(p))
+check(not sameShort:find("Installed now", 1, true), "no 'installed now' line when nothing changed")
+-- A corrected addon with every text answer blank is still said (Codex, #30).
+local onlyAddon = Report.Render(Report.ForProblem(p, { addon = "OtherAddon" }))
+check(onlyAddon:find("The player names: OtherAddon", 1, true), "an addon-only correction is in the Markdown")
+check(not Report.Render(Report.ForProblem(p, { addon = "TestAddon" })):find("What the player saw", 1, true),
+    "choosing Bugsy's own suspect adds nothing")
 
 -- Keys are redacted too, with a suffix on collision.
 local keyed = { values = { ["Karuzo"] = 1, ["<player>"] = 2 } }

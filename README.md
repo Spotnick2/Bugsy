@@ -22,7 +22,13 @@ understand and reports an author can act on.
 ## Using it
 
 `/bugsy`, the minimap button or the minimap's addon menu opens the window (right-click: the
-settings; `/bugsy minimap off` hides the button). `/bugsy report` reports a problem with no
+settings; `/bugsy minimap off` hides the button). The window lists each problem by the addon that
+appears involved, with how often and when; an addon made for an older version of the game is
+marked out of date, with the suggestion to turn it off in the AddOns list until it's updated.
+**Copy for a bug report** gives the diagnostics ready to paste: Markdown for a GitHub issue, or a
+short text for a CurseForge comment. **Prepare report** adds what you were doing first. Bugsy
+sends nothing anywhere. Its look is WoW Forever or Pearl Glass (`/bugsy look`; Pearl needs a Glass
+addon such as Glass UI, and with Glass UI it follows the suite's look by default). `/bugsy report` reports a problem with no
 error. `/bugsy locals on` captures local variables with new errors (off by default: they can contain
 names and messages). `/bugsy status` says how Bugsy is catching errors. A new problem plays a short
 sound and prints one chat line (at most one every 10 s, held during combat). `/bugsy sound` lists

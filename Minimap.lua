@@ -21,7 +21,7 @@ local MM = {}
 ns.Minimap = MM
 
 MM.NAME = "Bugsy"
-MM.ICON = "Interface\\Icons\\Spell_Nature_InsectSwarm"   -- until Bugsy has its own logo (#26)
+MM.ICON = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Icon"   -- the hat (#28)
 MM.DEFAULT_POS = 225                                     -- degrees, LibDBIcon's default
 MM.RADIUS = 5                                            -- past the minimap's edge, LibDBIcon's
 local kind                                               -- "libdbicon" | "own" | nil

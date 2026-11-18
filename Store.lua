@@ -177,6 +177,16 @@ function Store.adopt(saved)
     if saved.minimap.hide ~= nil and type(saved.minimap.hide) ~= "boolean" then saved.minimap.hide = nil end
     if saved.minimap.minimapPos ~= nil and type(saved.minimap.minimapPos) ~= "number" then saved.minimap.minimapPos = nil end
     saved.settings.front = saved.settings.front ~= false
+    -- The window's look (#28): the own look and following Glass UI (on by default, as every
+    -- suite member); the window's place and size. Junk reads as the default.
+    if saved.settings.look ~= "forever" and saved.settings.look ~= "pearl" then saved.settings.look = nil end
+    if saved.settings.followGlassUI ~= nil and type(saved.settings.followGlassUI) ~= "boolean" then saved.settings.followGlassUI = nil end
+    if type(saved.window) ~= "table" then saved.window = nil
+    else
+        for _, k in ipairs({ "left", "top", "w", "h" }) do
+            if saved.window[k] ~= nil and (type(saved.window[k]) ~= "number" or saved.window[k] ~= saved.window[k]) then saved.window[k] = nil end
+        end
+    end
 
     local problems = type(saved.problems) == "table" and saved.problems or {}
     local kept, n = {}, 0

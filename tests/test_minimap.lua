@@ -14,14 +14,14 @@ check(MM.Available(), "the button is made at login")
 local obj = WoW.ldb.objects.Bugsy
 check(obj ~= nil, "a LibDataBroker launcher named Bugsy")
 eq(obj.type, "launcher", "of type launcher")
-eq(obj.icon, "Interface\\Icons\\Spell_Nature_InsectSwarm", "the placeholder icon (the TOC's too)")
+eq(obj.icon, "Interface\\AddOns\\!Bugsy\\Media\\Icon", "the hat icon (the TOC's too)")
 eq(WoW.ldbi.registered.Bugsy, BugsyDB.minimap, "LibDBIcon keeps BugsyDB.minimap itself")
 local button = WoW.ldbi.buttons.Bugsy
 check(button:IsShown(), "shown by default")
 
 -- The TOC's icon in the addon list is the same placeholder.
 local toc = io.open("!Bugsy.toc"):read("*a")
-check(toc:find("## IconTexture: Interface\\Icons\\Spell_Nature_InsectSwarm", 1, true), "the TOC's IconTexture")
+check(toc:find("## IconTexture: Interface\\AddOns\\!Bugsy\\Media\\Icon", 1, true), "the TOC's IconTexture")
 for _, f in ipairs({ "AddonCompartmentFunc: Bugsy_OnAddonCompartmentClick",
     "AddonCompartmentFuncOnEnter: Bugsy_OnAddonCompartmentEnter",
     "AddonCompartmentFuncOnLeave: Bugsy_OnAddonCompartmentLeave" }) do
@@ -105,7 +105,7 @@ local own = ns3._test.Minimap.own()
 check(own ~= nil, "made at login")
 eq(own:GetParent(), Minimap, "on the minimap")
 check(own:IsShown(), "shown by default")
-eq(own.icon._file, "Interface\\Icons\\Spell_Nature_InsectSwarm", "the same icon")
+eq(own.icon._file, "Interface\\AddOns\\!Bugsy\\Media\\Icon", "the same icon")
 eq(own.border._file, 136430, "the client's tracking border, as other minimap buttons")
 local p = own._points[1]
 eq(p[1], "CENTER", "placed by its centre")

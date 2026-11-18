@@ -136,6 +136,9 @@ boot:SetScript("OnEvent", function(_, event, name)
     elseif event == "PLAYER_LOGIN" then
         Capture.check("PLAYER_LOGIN")
         Capture.schedule()
+        -- The window's look, after capture is settled; never on the capture path, and a
+        -- failure here leaves the Forever look (Theme reads nil as Forever).
+        if ns.Theme then pcall(ns.Theme.Decide) end
     elseif event == "PLAYER_REGEN_ENABLED" then
         flushNotices()
     end
@@ -257,6 +260,7 @@ local HELP = {
     "/bugsy status - how Bugsy is catching errors",
     "/bugsy options - open Bugsy's page in Options > AddOns",
     "/bugsy minimap on|off - the minimap button",
+    "/bugsy look forever|pearl|follow - the window's look (follow: Glass UI's)",
     "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
 }
 Bugsy.HELP = HELP
@@ -299,6 +303,18 @@ function Bugsy.Slash(msg)
             .. (((arg == "on" or arg == "off") and " from the next session (/reload).") or "."))
     elseif cmd == "status" then
         for _, l in ipairs(Bugsy.StatusLines()) do say(l) end
+    elseif cmd == "look" then
+        local T = ns.Theme
+        if arg == "forever" or arg == "pearl" or arg == "follow" then
+            if not T.SetChoice(arg) then
+                say(arg == "follow" and "Glass UI isn't loaded, so there is no suite look to follow."
+                    or "Pearl Glass needs a Glass addon (Glass UI, for example) loaded.")
+            end
+        elseif arg ~= "" then
+            say("/bugsy look forever, pearl or follow.")
+        end
+        local name, note = T.Describe()
+        say("the window's look is " .. name .. "." .. (note and (" " .. note) or ""))
     elseif cmd == "minimap" then
         local on = setting("minimap", arg)
         say("the minimap button is " .. (on and "shown." or "hidden.")

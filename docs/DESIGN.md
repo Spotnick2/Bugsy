@@ -45,11 +45,12 @@ One embedded library, `LibBugsy-1.0`, for authors (phase 2). Five layers, each w
 | Capture | `Compat.lua`, `Capture.lua` (native handler, events, collector provider) | inside the error handler / event / callback | Take what exists only now into a bounded queue. Nothing else. |
 | Incidents | `Signature.lua`, `Store.lua` | deferred drain | Signatures, grouping into problems, samples, counters, caps, SavedVariables. |
 | Diagnostics | `Attribution.lua`, `Patterns.lua`, `Context.lua` | drain / on view | Who is involved and why we think so; known-pattern explanations; the environment. |
-| Presentation | `UI.lua`, `ReportUI.lua`, `Options.lua` | on demand | The problem list, details, the report flow, quiet notices, the Options page. |
+| Presentation | `Locale.lua`, `Theme.lua`, `Widgets.lua`, `Model.lua`, `UI.lua`, `ReportUI.lua`, `Options.lua`, `Minimap.lua` | on demand | The window (problems, details, the report flow), its looks, quiet notices, the Options page, the minimap button. |
 | Export | `Report.lua`, `Json.lua` | on demand | The canonical report, Markdown and JSON, redaction, size trimming. |
 
-The reporting engine never depends on LibGlass or GlassUI. Presentation uses Blizzard templates;
-a Glass skin (B-21) is applied after, under `pcall`, so a LibGlass error can still be reported.
+The reporting engine never depends on LibGlass or GlassUI. The window's Pearl look (#28, B-21)
+**borrows** a LibGlass another addon loaded (Bugsy embeds no library, #26), and is built under one
+`pcall` with the Forever look as its fallback, so a LibGlass error can still be reported.
 
 ## 3. Capture
 
@@ -388,12 +389,45 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
 
 ## 8. Presentation
 
-- **Main window** (`/bugsy`): a list of problems (title, addon, count, last seen, restricted /
-  muted / noise tags) with filters (this session / previous / all; show muted), and a detail pane:
-  summary, involved addons with versions, attribution with evidence, possible explanation, then the
-  full message, stack and locals in a read-only box. Buttons: **Prepare report**, **Copy details**,
-  **Mute**, **Clear** (this problem; a menu for this session's and all). A status line: provider
-  mode, handler changes, session losses.
+- **Main window** (`/bugsy`, #28). The owner's priority: **seeing at a glance which addon is causing
+  problems**, and **copying the diagnostics in one click** for a GitHub issue or a CurseForge comment;
+  the guided report is a small part. One window, resizable (760x460 at least), clamped to the
+  screen, its place and size saved (`BugsyDB.window`); Escape closes it (`UISpecialFrames`, through
+  the published alias `BugsyFrame`). A compact header (the hat, Bugsy, the look menu, settings,
+  close), two columns, and a status footer.
+  - **The problems** (a third): tabs **This session** / **History** (all or the previous session),
+    a search over the addon's name and title, the problem's title and the newest sample's message
+    and stack, and "Show muted (n)" as a secondary control. Each row: the addon's own icon (its TOC
+    `IconTexture`) and title, or an honest "Unknown source"; a one-line summary; a count badge; a
+    relative last-seen time; "out of date" when the addon was made for an older client. A search
+    or filter never leaves a hidden problem selected (`Model.KeepSelection`).
+  - **The selected problem** (two thirds): "APPEARS INVOLVED" (or "NAMED BY WOW", "SOURCE UNKNOWN")
+    with the addon, a pill keeping the uncertainty ("Cause unconfirmed"), the title, the count and
+    last seen, how many problems that addon has; **after a patch day**, an addon made for an older
+    interface is marked "Out of date" with a suggestion to turn it off in the AddOns list until its
+    author updates it (Bugsy never disables anything itself: the owner); a possible explanation only
+    where a pattern matches; collapsible **Recent activity** (only with breadcrumbs: never
+    invented), **Technical details** (the full text, selectable), **Occurrences**. Actions:
+    **Copy for a bug report** (primary), **Prepare report**, **Mute**, and "..." (Copy details,
+    Clear this problem).
+  - **Empty states**, distinct: none ("No problems detected this session", "Bugsy's keeping
+    watch.", "Something still isn't working?" and Report a problem), no results (Clear search),
+    only muted (Show muted), and **interrupted**, which comes first: an empty list never implies
+    healthy monitoring.
+  - **The footer**: "Monitoring active", or what interrupts or limits capture (a displaced handler,
+    a possible pause, counted-only errors, internal failures, suspended forwarding); a click opens
+    the details (`/bugsy status`'s lines, the look and its failures). **Manage**: clear this
+    problem, this session's, or all (which asks first, in the footer).
+- **Looks** (#28; #13's design reviewed by Codex and Fable; `Theme.lua`): WoW Forever (native art,
+  ivory text, gold headings, one primary action) and Pearl Glass (LibGlass's reflective shell,
+  borrowed). "Follow Glass UI" by default when Glass UI is loaded (its suite theme, asked at
+  `PLAYER_LOGIN`); the own look otherwise (`settings.look`, `settings.followGlassUI`). Bugsy reports
+  to Glass UI's suite every time it asks (API 1: `built` only for a followed preset, `declined`
+  when its own switch is off, `own` tint and accent, `live = false`), and again when a build fails.
+  LibGlass is called only while a window is built; after that, states only recolour our own
+  textures. A failed glass build is recorded (`Theme.Failures`), glass is given up for the session,
+  and the window is built again in Forever. A look change (the window's menu, the settings,
+  `/bugsy look`) rebuilds the window with its state kept: view, tab, search, selection, draft, step.
 - **Settings**: capture locals (off by default, with its privacy note; applies from then on),
   chat notices, the alert sound and its choice, front mode (from the next session). Set by the
   slash command or on **Bugsy's page in Options > AddOns** (#22, `Options.lua`, `/bugsy options`),
@@ -423,16 +457,21 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
   setting (`/bugsy minimap on|off`, the Options page). The minimap's addon compartment clicks and
   shows the tooltip the same way. The TOC's `IconTexture` puts the icon in the addon list: the
   client's Insect Swarm icon until Bugsy has its own logo. Without a minimap, no button.
-- **Report flow**: (1) what were you doing, what happened, what did you expect, and "I didn't
-  notice a visible problem"; (2) a preview of everything included, with the privacy note; (3) where
-  to report it (the registered destination, the TOC's `X-Website`, or "Bugsy doesn't know where
-  this addon takes reports; check its download page"); (4) the text, Markdown or JSON, selected,
-  with "Press Ctrl+C to copy, then paste it where the author asked". The state after: "Copied (not
-  sent)" is shown only as guidance: Bugsy cannot see the clipboard.
-- **Report a problem** (no error): pick an addon (registered first, then all loaded), the same
-  questions, that addon's library context and breadcrumbs, preview, copy. If extra diagnostics are
-  needed (locals on, reproduce), the flow says so: Bugsy cannot reconstruct the past.
-- Frames are built lazily on first open.
+- **Report flow** (#28, `ReportUI.lua`), inside the window with "< Problems" back: **1 Describe**
+  (a searchable addon picker that starts on "Choose an addon..." and never picks one for the
+  player; for a captured problem the addon Bugsy points at is preselected, saying it's Bugsy's
+  reading; a multiline description, optional expected and steps; "I didn't notice a visible
+  problem" only for a captured error), **2 Review** (a readable summary: the addon, what the player
+  wrote, what is attached, versions, where to report, the privacy note; the full report
+  expandable), **3 Copy & report** ("Ready to copy"; the addon's page when its TOC has one, else
+  where to look; Markdown for a GitHub issue, a short plain text for a CurseForge comment
+  (`Report.Short`: the error with the version and build it was captured with, a newer installed
+  version labelled apart), JSON as the advanced format; Select all and the Ctrl+C instructions). **Copy
+  for a bug report** opens straight at step 3. The answers live in the draft (`Model.NewDraft`), so
+  Back, Next and a look change keep them; every change bumps the draft's version and the copy is
+  always rendered for the current one (`Model.Render`), so a stale preview can't be copied. Nothing
+  ever says it was copied or sent: Bugsy can't see the clipboard and sends nothing.
+- Frames are built lazily on first open. Player-facing strings go through `ns.L` (`Locale.lua`).
 
 ## 9. Export
 

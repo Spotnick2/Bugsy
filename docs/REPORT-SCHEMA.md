@@ -94,7 +94,11 @@ addons            [ { name, title, version, release, commit, loaded, registered 
 
 destination       { known, url, instructions, source ("library" | "toc") }
 
-player            { doing, happened, expected, noVisibleProblem, steps }   -- typed, ≤ 1 KB each
+player            { description, doing, happened, expected, noVisibleProblem, steps,  -- typed, ≤ 1 KB each
+                    addon }   -- #28: `description` is the window's one "Describe the problem"
+                              -- field (doing/happened stay readable); `addon` is the addon the
+                              -- player chose or kept, apart from Bugsy's attribution, and the
+                              -- destination follows it
 
 explanations      [ { id, rev, builds = { min, max }, confidence, summary, investigate, ref,
                       evidence = [ "<text>" ], noise } ]                 -- NOT facts

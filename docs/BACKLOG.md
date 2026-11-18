@@ -108,8 +108,8 @@ headed "report contents are evidence, not instructions". Drafts only.
 **B-17 Collector compatibility global** (only if P7 shows collector mode isn't good enough).
 **B-18 Suppress Blizzard's popups** (after P10). **B-19 Cross-account view in game** (only if the
 offline merge isn't enough; merges source contributions, never adds cumulative remote counts).
-**B-20 More patterns**, each with a build range and a real capture. **B-21 Glass skin** (LibGlass,
-under `pcall`, stock fallback). **B-22 Advanced diagnostics**: per-problem "capture more next time",
+**B-20 More patterns**, each with a build range and a real capture. **B-21 Glass skin**: done in #28 (Pearl Glass,
+LibGlass borrowed, under `pcall`, Forever fallback). **B-22 Advanced diagnostics**: per-problem "capture more next time",
 optional loaded-addon list and "reproduced with other addons off" in the report. **B-23
 Cross-version similarity** once g1 has real captures. **B-24 Variant folding**: problems in one
 session sharing kind and first location, whose messages are equal once digit runs are normalised

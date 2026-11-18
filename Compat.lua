@@ -152,6 +152,16 @@ function API.AddOnLoaded(name)
 end
 
 -- Every installed addon: { name, title, loaded }.
+-- The interface version an addon's TOC was made for (#28: "out of date" after a patch
+-- day), or nil. A number from the client, never text (D15).
+function API.AddOnInterface(name)
+    local A = addOns()
+    if not (A and A.GetAddOnInterfaceVersion) then return nil end
+    local ok, v = pcall(A.GetAddOnInterfaceVersion, name)
+    if ok and Safe.readable(v) and type(v) == "number" and v > 0 then return v end
+    return nil
+end
+
 function API.AddOnList()
     local A = addOns()
     local out = {}
