@@ -30,6 +30,7 @@ local function resetBugsy()
     }
     WoW.playerName, WoW.realm = "Karuzo", "Morphisto"
     WoW.lines = {}
+    WoW.shift = false
 end
 table.insert(WoW.onReset, resetBugsy)
 resetBugsy()
@@ -98,6 +99,9 @@ function debugstack(level, top, bottom)
     return s
 end
 function debuglocals(level) return WoW.locals end
+
+-- The Shift key (WoW.shift), for Shift+Tab in the report form (#24). In the 70959 dump.
+function IsShiftKeyDown() return WoW.shift == true end
 
 -- Raise an error the way the client does: call the installed handler.
 function WoW.raise(msg) if WoW.handler then return WoW.handler(msg) end end

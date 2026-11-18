@@ -138,6 +138,29 @@ local p = Store.List("all", true)[1]
 ReportUI.OpenFor(p.id)
 local rf = ReportUI.frame()
 check(rf:IsShown(), "Prepare report opens the flow")
+-- Tab moves through the four answers, Shift+Tab back, around (#24).
+local function focused()
+    for _, k in ipairs({ "doing", "happened", "expected", "steps" }) do if rf[k]._focus then return k end end
+end
+local function tab(box) box:GetScript("OnTabPressed")(box) end
+for _, k in ipairs({ "doing", "happened", "expected", "steps" }) do rf[k]:ClearFocus() end
+tab(rf.doing)
+eq(focused(), "happened", "Tab: the next answer")
+rf.happened:ClearFocus()
+tab(rf.expected)
+eq(focused(), "steps", "Tab from the third: the fourth")
+rf.steps:ClearFocus()
+tab(rf.steps)
+eq(focused(), "doing", "Tab from the last: around to the first")
+rf.doing:ClearFocus()
+WoW.shift = true
+tab(rf.doing)
+eq(focused(), "steps", "Shift+Tab from the first: around to the last")
+rf.steps:ClearFocus()
+tab(rf.happened)
+eq(focused(), "doing", "Shift+Tab: the previous answer")
+rf.doing:ClearFocus()
+WoW.shift = false
 rf.doing:SetText("Looting")
 rf.noProblem:SetChecked(true)
 rf.previewBtn:GetScript("OnClick")(rf.previewBtn)
