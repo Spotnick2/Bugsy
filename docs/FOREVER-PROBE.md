@@ -481,4 +481,25 @@ the wrapper's pass-backs). Both procedures: all checks passed.
   own wrapper instead, and Bugsy goes in front of it without these limits (measured above).
 - **Blizzard's popups: B-18 first** (#33). Bugsy hides the blocked-action popup and message and the
   Lua warning window by default. Its taint check (P10's remaining half) and the full-exit
-  persistence check are the probe's `gate` procedure (`/fp steps bugsy gate`): results pending.
+  persistence check are the probe's `gate` procedure (`/fp steps bugsy gate`): **passed**, below.
+
+### `gate` rev 1: build 70959, 2026-11-18
+
+The v0.1.0 release gate's last two checks, Bugsy with B-18 (#34) and the popups hidden by default.
+- **[game, 70959] B-18 hides what it should, and only that:** at load Bugsy unregistered
+  `GameEvent:ADDON_ACTION_FORBIDDEN`, `GameEvent:ADDON_ACTION_BLOCKED` and
+  `ScriptErrorsFrame:LUA_WARNING`, and nothing on `UIParent` (it doesn't register them on Forever).
+  A forbidden `TargetUnit()` raised **no popup** (owner; the probe's screenshot), and Bugsy still
+  recorded it (its count up by one, in each of the three runs).
+- **[game, 70959] P10, taint: none from Bugsy.** With `taintLog 1` from a reload before Bugsy's
+  load, through two forbidden calls and a minute of normal play (bags, character pane, spellbook,
+  world map, game menu, targeting), `Logs\taint.log` held only the two blocked actions the probe
+  itself caused (`An action was blocked because of taint from BugsyProbe - TargetUnit()`). No line
+  names `!Bugsy`. Level 1 logs blocked actions only: an action Bugsy's taint blocked would be there.
+- **[game, 70959] Persistence across a full client exit: passed.** The session went 68 -> 69; the
+  kept problem's count was the same after (1 -> 1) and it showed in the previous-session filter;
+  the muted one was still muted; the cleared one stayed gone.
+- **[game, 70959] The client, for the procedure:** a full exit resets `taintLog` to 0 (it read 0
+  after the relaunch, 1 before), and the relaunched client starts a new `taint.log`, so the first
+  run's log was lost. A reload keeps it: lines from before a reload were still there after it. Rev
+  2 of `gate` runs the persistence part first and ends the taint part with a reload.
