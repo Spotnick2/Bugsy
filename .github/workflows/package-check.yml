@@ -186,7 +186,10 @@ jobs:
           echo "ZIP=$zip" >> "$GITHUB_ENV"
 
       # The title is release.json's name: the packaged TOC's Title, colour
-      # codes stripped.
+      # codes stripped. GitHub renames an asset with characters it doesn't
+      # allow (!Bugsy-v0.1.0-forever.zip was stored as Bugsy-v0.1.0-forever.zip),
+      # and WowUp picks the asset by release.json's filename: so the zip goes
+      # up first, and release.json names it as GitHub stored it (Bugsy #38).
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -194,8 +197,15 @@ jobs:
           pre=
           case "${TAG,,}" in *alpha*|*beta*) pre=--prerelease ;; esac
           title="$(jq -r '.releases[0].name' out/release.json) ${TAG#v}"
-          gh release create "$TAG" "$ZIP" out/release.json --repo "$GITHUB_REPOSITORY" --verify-tag \
+          gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "$title" --notes-file out/notes.md $pre
+          asset=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' | grep -- '-forever\.zip$' | head -1)
+          test -n "$asset" || { echo "the release has no -forever.zip asset"; exit 1; }
+          echo "the zip is stored as $asset"
+          mkdir -p gh
+          jq -c --arg f "$asset" '.releases[0].filename = $f' out/release.json > gh/release.json
+          cat gh/release.json
+          gh release upload "$TAG" gh/release.json --repo "$GITHUB_REPOSITORY"
 
   # The same zip on Wago Addons, through its upload API - the request the
   # packager's upload_wago makes, minus its two problems: it would package a
