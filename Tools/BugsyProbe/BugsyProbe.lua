@@ -746,6 +746,81 @@ Probe:Steps("copy", {
     { text = "Setting 63 KB of text and reading it back.", auto = true, run = bigText },
 })
 
+-- The v0.1.0 release gate (#33): B-18's taint check, and a full-exit persistence check.
+local function gateLog(label, t)
+    BugsyProbeDB.gate = BugsyProbeDB.gate or {}
+    t.at = time()
+    BugsyProbeDB.gate[label] = t
+    return t
+end
+local FORBID = "'BugsyProbe' called TargetUnit"
+local GATE = { kept = "BugsyProbe gate kept", muted = "BugsyProbe gate muted", cleared = "BugsyProbe gate cleared" }
+local function gateSnapshot(label)
+    local t = { taintLog = C_CVar and C_CVar.GetCVar and C_CVar.GetCVar("taintLog") }
+    local d = diag()
+    t.session, t.hidePopups, t.popupsHidden = d.session, d.hidePopups, d.popupsHidden
+    for key, match in pairs(GATE) do
+        local m = diag(match)
+        t[key] = { count = m.count, muted = m.muted, inPrevious = m.inPrevious }
+    end
+    gateLog(label, t)
+    say(("gate[%s]: session=%s taintLog=%s hidden=%s kept=%s muted=%s/%s cleared=%s"):format(label,
+        tostring(t.session), tostring(t.taintLog), table.concat(t.popupsHidden or {}, ","),
+        tostring(t.kept.count), tostring(t.muted.count), tostring(t.muted.muted), tostring(t.cleared.count)))
+    return t
+end
+
+-- Rev 2: persistence first. The full exit resets taintLog to 0 and the client starts a new
+-- taint.log, while a reload keeps it (70959, 2026-11-18): so the taint part comes after the
+-- relaunch and ends with a reload, and the log is read after the run.
+Probe:Steps("gate", {
+    title = "Release gate: a full exit (#33), then Blizzard's popups hidden (B-18)", rev = 2,
+    { text = "Press Run: three errors for the persistence check.",
+      run = function()
+          raiseLater(GATE.kept, 0.05); raiseLater(GATE.muted, 0.3); raiseLater(GATE.cleared, 0.6)
+          return true end },
+    { text = "Waiting for Bugsy to record them.", timeout = 15,
+      wait = function()
+          for _, m in pairs(GATE) do if (diag(m).count or 0) == 0 then return false, "not recorded yet: " .. m end end
+          return true end },
+    { text = "Open /bugsy. Select \"" .. GATE.muted .. "\" and press Mute (if it isn't muted already). Then select \""
+        .. GATE.cleared .. "\" and use ... > Clear this problem. Leave \"" .. GATE.kept .. "\" alone. Then press Next." },
+    { text = "Recording what Bugsy holds before the exit.", auto = true,
+      run = function() gateSnapshot("before"); return true end,
+      check = function() local t = BugsyProbeDB.gate.before
+          return (t.kept.count or 0) > 0 and t.muted.muted == true and (t.cleared.count or 0) == 0,
+              ("kept %s, muted %s, cleared %s"):format(tostring(t.kept.count), tostring(t.muted.muted), tostring(t.cleared.count)) end },
+    { text = "Exit the game completely (not /reload), start it again and log in this character.", reload = "exit" },
+    { text = "Comparing with what Bugsy held before the exit.", auto = true,
+      run = function() gateSnapshot("after"); return true end,
+      check = function()
+          local b, a = BugsyProbeDB.gate.before, BugsyProbeDB.gate.after
+          local ok = a.session == (b.session or 0) + 1 and a.kept.count == b.kept.count and a.kept.inPrevious == true
+              and a.muted.muted == true and (a.cleared.count or 0) == 0
+          return ok, ("session %s -> %s; kept %s -> %s (previous: %s); muted %s; cleared %s"):format(
+              tostring(b.session), tostring(a.session), tostring(b.kept.count), tostring(a.kept.count),
+              tostring(a.kept.inPrevious), tostring(a.muted.muted), tostring(a.cleared.count)) end },
+    { text = "Type /console taintLog 1, then reload (so the taint log covers Bugsy's load).", reload = true },
+    { text = "Recording Bugsy's state: the popups it hid, and taintLog.", auto = true,
+      run = function() local t = gateSnapshot("start"); return true, tostring(t.taintLog) end,
+      check = function() local t = BugsyProbeDB.gate.start
+          return t.taintLog == "1" and t.popupsHidden ~= nil and #t.popupsHidden > 0,
+              "taintLog " .. tostring(t.taintLog) .. "; hidden: " .. table.concat(t.popupsHidden or {}, ", ") end },
+    { text = "Press Run: one forbidden call (TargetUnit). Blizzard's popup should NOT appear.", screenshot = "gate-forbidden",
+      run = function() BugsyProbeDB.gate.forbidBase = diag(FORBID).count or 0; return forbid() end },
+    { text = "Did Blizzard's \"blocked from an action\" popup appear?", ask = true },
+    { text = "Waiting for Bugsy to record the forbidden action.", timeout = 15,
+      wait = function()
+          local n = diag(FORBID).count or 0
+          if n > BugsyProbeDB.gate.forbidBase then return true end
+          return false, "not recorded yet" end,
+      check = function() local d = diag(FORBID)
+          return (d.count or 0) > BugsyProbeDB.gate.forbidBase, ("count %s (was %s)"):format(tostring(d.count), tostring(BugsyProbeDB.gate.forbidBase)) end },
+    { text = "Play normally for a minute: open your bags, the character pane, the spellbook, the world map and the game menu; target something, and fight one mob if you can. Then press Next." },
+    { text = "Type /console taintLog 0. Anything odd during this run?", ask = true },
+    { text = "Reload to save the results and write the taint log (a reload keeps it; the next full exit starts a new one).", reload = true },
+})
+
 -- Boot --------------------------------------------------------------------------------------
 
 local boot = CreateFrame("Frame")

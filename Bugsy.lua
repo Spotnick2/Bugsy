@@ -128,9 +128,15 @@ boot:SetScript("OnEvent", function(_, event, name)
             Capture.state.session = db.session
             -- read once a session (Codex, front design): /bugsy front changes the next session
             Capture.state.frontEnabled = db.settings.front ~= false
+            -- Blizzard's popups for what Bugsy records (B-18): hidden from this load, read once
+            -- a session like front (they can't be put back without a reload).
+            Capture.state.hidePopups = db.settings.hidePopups ~= false
+            if Capture.state.hidePopups then pcall(Capture.SuppressPopups) end
             Capture.sink = { record = Store.record, count = Store.count }
             Capture.schedule()
         else
+            -- Blizzard's warning window, should it load after Bugsy.
+            if name == "Blizzard_ScriptErrorsFrame" and Capture.state.hidePopups then pcall(Capture.SuppressPopups) end
             Capture.check(name)
         end
     elseif event == "PLAYER_LOGIN" then
@@ -170,7 +176,9 @@ function Bugsy.Diagnostics(match)
         forwardFailed = S.stats.forwardFailed,
         nativeInCollector = S.stats.nativeInCollector, failures = S.failures,
         deliveries = S.stats.deliveries, pause = Capture.healthSnapshot(), forward = Capture.forwardSnapshot(),
-        queueDropped = S.stats.queueDropped, suppressed = 0 }
+        queueDropped = S.stats.queueDropped, suppressed = 0,
+        -- the release gate's checks (#33): Blizzard's popups hidden, and what persists
+        hidePopups = S.hidePopups, popupsHidden = S.popupsHidden, session = Store.db() and Store.db().session }
     for _, n in pairs(S.stats.suppressed) do d.suppressed = d.suppressed + n end
     if type(match) == "string" and match ~= "" then
         local count, unconfirmed, newest = 0, 0, nil
@@ -183,6 +191,13 @@ function Bugsy.Diagnostics(match)
             end
         end
         d.count, d.unconfirmed = count, unconfirmed
+        -- muted, and in the previous session's list (the persistence check, #33)
+        for _, p in ipairs(Store.List("all", true)) do
+            if p.title:find(match, 1, true) and p.muted then d.muted = true end
+        end
+        for _, p in ipairs(Store.List("previous", true)) do
+            if p.title:find(match, 1, true) then d.inPrevious = true end
+        end
         if newest then
             d.where = ns.Signature.where(ns.Signature.lines(type(newest.stack) == "string" and newest.stack or nil))
             d.tier, d.entry = newest.tier, newest.entry
@@ -195,7 +210,7 @@ end
 -- The settings (#22): one place they change, for the slash command and the Options page,
 -- so the two can't drift. Each is a boolean in BugsyDB.settings; the sound's choice is
 -- ChooseSound. Turning the sound on plays it, as a sample. False when refused.
-Bugsy.TOGGLES = { locals = true, notices = true, sound = true, front = true }
+Bugsy.TOGGLES = { locals = true, notices = true, sound = true, front = true, hidePopups = true }
 
 local function settingsChanged()
     if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
@@ -246,6 +261,13 @@ function Bugsy.StatusLines()
     local lines = { mode .. "; " .. lost .. " not fully captured this session; " .. failures
         .. " internal failures; " .. pending .. " waiting." }
     for _, l in ipairs(Capture.limits()) do lines[#lines + 1] = l end
+    local hidden = Capture.state.popupsHidden
+    if hidden and #hidden > 0 then
+        lines[#lines + 1] = "Blizzard's popups for blocked actions and its Lua warning window are hidden; "
+            .. "Bugsy records them (" .. table.concat(hidden, ", ") .. ")."
+    elseif Capture.state.hidePopups then
+        lines[#lines + 1] = "Blizzard's popups couldn't be hidden on this client: they show as well."
+    end
     return lines
 end
 
@@ -262,6 +284,7 @@ local HELP = {
     "/bugsy minimap on|off - the minimap button",
     "/bugsy look forever|pearl|follow - the window's look (follow: Glass UI's)",
     "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
+    "/bugsy popups hide|show - Blizzard's popups for blocked actions and Lua warnings, which Bugsy records (hidden by default; from the next session)",
 }
 Bugsy.HELP = HELP
 
@@ -301,6 +324,11 @@ function Bugsy.Slash(msg)
         local on = setting("front", arg)
         say("catching errors ahead of another addon's handler is " .. ((on ~= false) and "on" or "off")
             .. (((arg == "on" or arg == "off") and " from the next session (/reload).") or "."))
+    elseif cmd == "popups" then
+        local onOff = (arg == "hide" and "on") or (arg == "show" and "off") or ""
+        local on = setting("hidePopups", onOff)
+        say("Blizzard's popups for blocked actions and Lua warnings are " .. ((on ~= false) and "hidden" or "shown")
+            .. ((onOff ~= "" and " from the next session (/reload).") or ". /bugsy popups hide or show."))
     elseif cmd == "status" then
         for _, l in ipairs(Bugsy.StatusLines()) do say(l) end
     elseif cmd == "look" then

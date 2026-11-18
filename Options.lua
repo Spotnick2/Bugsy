@@ -235,6 +235,8 @@ local function buildPage()
         "Off by default: they can contain names and messages. Applies to new errors.")
     y = toggle(canvas, y, "front", "Catch errors ahead of another addon's error handler",
         "Bugsy passes each error on to that handler. Applies from the next session (/reload).")
+    y = toggle(canvas, y, "hidePopups", "Hide Blizzard's popups for blocked actions and Lua warnings",
+        "Bugsy records them in its window instead. Applies from the next session (/reload).")
     y = y - 4
 
     y = heading(canvas, y, "Status")

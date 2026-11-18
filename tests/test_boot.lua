@@ -42,4 +42,54 @@ SlashCmdList.BUGSY("report")
 check(ns.ReportUI.frame():IsShown() and ns.UI.state.view == "report", "/bugsy report opens the manual report, in the window")
 eq(ns.UI.state.draft.addon, nil, "with no addon chosen for the player")
 
+-- The release gate's persistence check reads these through Diagnostics (#33).
+WoW.reset()
+local gns = loadAddon()
+WoW.raise("Interface/AddOns/TestAddon/Core.lua:7: gate kept")
+WoW.raise("Interface/AddOns/TestAddon/Core.lua:8: gate muted")
+drain()
+local gd = gns.Bugsy.Diagnostics("gate muted")
+eq(gd.session, BugsyDB.session, "Diagnostics: the session")
+eq(gd.muted, nil, "not muted yet")
+for _, q in ipairs(problems(gns)) do if q.title:find("gate muted", 1, true) then gns.Store.SetMuted(q.id, true) end end
+eq(gns.Bugsy.Diagnostics("gate muted").muted, true, "Diagnostics: muted")
+eq(gns.Bugsy.Diagnostics("gate kept").inPrevious, nil, "not in the previous session yet")
+local gsaved = BugsyDB
+WoW.reset()
+gns = loadAddon({ db = gsaved })
+eq(gns.Bugsy.Diagnostics("gate kept").inPrevious, true, "Diagnostics: in the previous session's list")
+eq(gns.Bugsy.Diagnostics("gate muted").muted, true, "still muted")
+
+-- B-18 (#33): Blizzard's displays of what Bugsy records are hidden at load; Bugsy keeps them.
+WoW.reset()
+loadAddon()
+eq(BugsyDB.settings.hidePopups, true, "hiding Blizzard's popups is on by default")
+eq(WoW.routed.ADDON_ACTION_FORBIDDEN, nil, "the blocked-action popup's route is unregistered")
+eq(WoW.routed.ADDON_ACTION_BLOCKED, nil, "and the 'Interface action failed' message's")
+eq(WoW.routed.TRADE_REQUEST, true, "nothing else of the router's")
+check(not ScriptErrorsFrame:IsEventRegistered("LUA_WARNING"), "the Lua warning window no longer gets warnings")
+drain()
+SlashCmdList.BUGSY("status")
+check(chatHas("are hidden; Bugsy records them"), "/bugsy status says they're hidden")
+check(chatHas("GameEvent:ADDON_ACTION_FORBIDDEN") and chatHas("ScriptErrorsFrame:LUA_WARNING"), "and what was unregistered")
+SlashCmdList.BUGSY("popups show")
+eq(BugsyDB.settings.hidePopups, false, "/bugsy popups show turns it off")
+check(chatHas("shown from the next session"), "from the next session")
+-- Off: the next session leaves Blizzard's displays alone.
+local saved = BugsyDB
+WoW.reset()
+loadAddon({ db = saved })
+eq(WoW.routed.ADDON_ACTION_FORBIDDEN, true, "off: Blizzard's popup is left")
+check(ScriptErrorsFrame:IsEventRegistered("LUA_WARNING"), "and its warning window")
+SlashCmdList.BUGSY("popups hide")
+eq(BugsyDB.settings.hidePopups, true, "/bugsy popups hide turns it back on")
+-- No router (another client): nothing breaks, and status says it couldn't.
+saved = BugsyDB
+WoW.reset()
+GameEvent = nil
+loadAddon({ db = saved })
+eq(saved.settings.hidePopups, true, "still on")
+SlashCmdList.BUGSY("status")
+check(chatHas("ScriptErrorsFrame:LUA_WARNING") and not chatHas("GameEvent:"), "without the router, only the warning window is hidden")
+
 done("test_boot")

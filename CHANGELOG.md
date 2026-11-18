@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Blizzard's popup for a blocked action, its "Interface action failed" message and its Lua
+  warning window are hidden: Bugsy records them in its window instead. `/bugsy popups show`
+  (or the setting) brings them back from the next session.
 - A new window: each problem listed by the addon that appears involved, its count and when it was
   last seen; search; This session and History; a clear "monitoring" status; Bugsy's hat.
 - Out-of-date addons are marked after a patch day, with a suggestion to turn them off until

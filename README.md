@@ -30,7 +30,8 @@ short text for a CurseForge comment. **Prepare report** adds what you were doing
 sends nothing anywhere. Its look is WoW Forever or Pearl Glass (`/bugsy look`; Pearl needs a Glass
 addon such as Glass UI, and with Glass UI it follows the suite's look by default). `/bugsy report` reports a problem with no
 error. `/bugsy locals on` captures local variables with new errors (off by default: they can contain
-names and messages). `/bugsy status` says how Bugsy is catching errors. A new problem plays a short
+names and messages). `/bugsy status` says how Bugsy is catching errors. Blizzard's popups for blocked actions and Lua
+warnings are hidden, since Bugsy records them (`/bugsy popups show` brings them back after a reload). A new problem plays a short
 sound and prints one chat line (at most one every 10 s, held during combat). `/bugsy sound` lists
 the six sounds and `/bugsy sound 1-6` picks one; `/bugsy sound off` and `/bugsy notices off` turn
 them off. Every setting is also on Bugsy's page in the game's Options > AddOns (`/bugsy options`).
