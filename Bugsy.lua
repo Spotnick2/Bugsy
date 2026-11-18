@@ -189,13 +189,56 @@ function Bugsy.Diagnostics(match)
     return d
 end
 
-local function setting(key, arg)
-    local db = Store.db()
-    if not db then return end
-    if arg == "on" then db.settings[key] = true elseif arg == "off" then db.settings[key] = false end
-    return db.settings[key]
+-- The settings (#22): one place they change, for the slash command and the Options page,
+-- so the two can't drift. Each is a boolean in BugsyDB.settings; the sound's choice is
+-- ChooseSound. Turning the sound on plays it, as a sample. False when refused.
+Bugsy.TOGGLES = { locals = true, notices = true, sound = true, front = true }
+
+local function settingsChanged()
+    if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
 end
 
+function Bugsy.Get(key)
+    local db = Store.db()
+    return db and db.settings[key]
+end
+
+function Bugsy.SetSetting(key, on)
+    local db = Store.db()
+    if not (db and Bugsy.TOGGLES[key] and type(on) == "boolean") then return false end
+    db.settings[key] = on
+    if key == "sound" and on then playSound(db) end
+    settingsChanged()
+    return true
+end
+
+-- The n-th sound: saved as its FileDataID, the sound turned on, and played.
+function Bugsy.ChooseSound(n)
+    local db = Store.db()
+    if not (db and type(n) == "number" and Bugsy.SOUNDS[n]) then return false end
+    db.settings.soundId, db.settings.sound = Bugsy.SOUNDS[n].id, true
+    playSound(db)
+    settingsChanged()
+    return true
+end
+
+function Bugsy.SoundIndex() return soundIndex(Store.db()) end
+
+local function setting(key, arg)
+    if arg == "on" or arg == "off" then Bugsy.SetSetting(key, arg == "on") end
+    return Bugsy.Get(key)
+end
+
+-- What /bugsy status says, and the Options page shows (#22).
+function Bugsy.StatusLines()
+    local mode, lost, failures, pending = Bugsy.Status()
+    local lines = { mode .. "; " .. lost .. " not fully captured this session; " .. failures
+        .. " internal failures; " .. pending .. " waiting." }
+    for _, l in ipairs(Capture.limits()) do lines[#lines + 1] = l end
+    return lines
+end
+
+-- /bugsy help, and the About page's commands (#22): one list.
 local HELP = {
     "/bugsy - open the window",
     "/bugsy report - report a problem that showed no error",
@@ -204,8 +247,10 @@ local HELP = {
     "/bugsy sound on|off - a sound when a new problem is caught",
     "/bugsy sound 1-6 - choose that sound (plays it); /bugsy sound lists them",
     "/bugsy status - how Bugsy is catching errors",
+    "/bugsy options - open Bugsy's page in Options > AddOns",
     "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
 }
+Bugsy.HELP = HELP
 
 function Bugsy.Slash(msg)
     msg = type(msg) == "string" and msg:lower():match("^%s*(.-)%s*$") or ""
@@ -223,15 +268,12 @@ function Bugsy.Slash(msg)
     elseif cmd == "sound" then
         local db, n = Store.db(), tonumber(arg)
         if not db then return end
-        if n and Bugsy.SOUNDS[n] then
-            db.settings.soundId, db.settings.sound = Bugsy.SOUNDS[n].id, true
+        if n and Bugsy.ChooseSound(n) then
             say(("the sound for a new problem is %d. %s."):format(n, Bugsy.SOUNDS[n].name))
-            playSound(db)
         elseif arg == "on" or arg == "off" then
             local on = setting("sound", arg)
             local i = soundIndex(db)
             say(("the sound for a new problem is %s (%d. %s)."):format(on and "on" or "off", i, Bugsy.SOUNDS[i].name))
-            if on then playSound(db) end
         elseif arg == "" then
             local i = soundIndex(db)
             say(("the sound for a new problem is %s. /bugsy sound <number> chooses one (and plays it):")
@@ -247,10 +289,11 @@ function Bugsy.Slash(msg)
         say("catching errors ahead of another addon's handler is " .. ((on ~= false) and "on" or "off")
             .. (((arg == "on" or arg == "off") and " from the next session (/reload).") or "."))
     elseif cmd == "status" then
-        local mode, lost, failures, pending = Bugsy.Status()
-        say(mode .. "; " .. lost .. " not fully captured this session; " .. failures
-            .. " internal failures; " .. pending .. " waiting.")
-        for _, l in ipairs(Capture.limits()) do say(l) end
+        for _, l in ipairs(Bugsy.StatusLines()) do say(l) end
+    elseif cmd == "options" or cmd == "settings" or cmd == "config" then
+        if not (ns.Options and ns.Options.Open()) then
+            say("the settings are in the game's Options > AddOns > Bugsy.")
+        end
     else
         for _, line in ipairs(HELP) do say(line) end
     end

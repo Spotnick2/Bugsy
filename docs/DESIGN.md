@@ -45,7 +45,7 @@ One embedded library, `LibBugsy-1.0`, for authors (phase 2). Five layers, each w
 | Capture | `Compat.lua`, `Capture.lua` (native handler, events, collector provider) | inside the error handler / event / callback | Take what exists only now into a bounded queue. Nothing else. |
 | Incidents | `Signature.lua`, `Store.lua` | deferred drain | Signatures, grouping into problems, samples, counters, caps, SavedVariables. |
 | Diagnostics | `Attribution.lua`, `Patterns.lua`, `Context.lua` | drain / on view | Who is involved and why we think so; known-pattern explanations; the environment. |
-| Presentation | `UI.lua`, `ReportUI.lua` | on demand | The problem list, details, the report flow, quiet notices. |
+| Presentation | `UI.lua`, `ReportUI.lua`, `Options.lua` | on demand | The problem list, details, the report flow, quiet notices, the Options page. |
 | Export | `Report.lua`, `Json.lua` | on demand | The canonical report, Markdown and JSON, redaction, size trimming. |
 
 The reporting engine never depends on LibGlass or GlassUI. Presentation uses Blizzard templates;
@@ -394,8 +394,15 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
   full message, stack and locals in a read-only box. Buttons: **Prepare report**, **Copy details**,
   **Mute**, **Clear** (this problem; a menu for this session's and all). A status line: provider
   mode, handler changes, session losses.
-- **Settings** (MVP): capture locals (off by default, with its privacy note; applies from then on),
-  chat notices on/off.
+- **Settings**: capture locals (off by default, with its privacy note; applies from then on),
+  chat notices, the alert sound and its choice, front mode (from the next session). Set by the
+  slash command or on **Bugsy's page in Options > AddOns** (#22, `Options.lua`, `/bugsy options`),
+  both through `Bugsy.SetSetting` / `Bugsy.ChooseSound`, so they can't drift. The page is the
+  porting guide's shared recipe (a canvas registered at `PLAYER_LOGIN`, hidden at creation,
+  built on its first show, re-read on every show; the client's art when a template is missing),
+  with the capture status (`Bugsy.StatusLines`, what `/bugsy status` says), buttons opening the
+  window and a manual report (closing Settings with `Close(true)` first), and an **About**
+  sub-page: the version, how to use, and the commands from `/bugsy help`'s list.
 - **Notifications**: one chat line per problem **on its first occurrence this session** (a bug
   from last week coming back today is announced, as the usual viewer does), at most one line every 10 s,
   held until combat ends, with an alert sound (one of the owner's six picks, FileDataIDs on the

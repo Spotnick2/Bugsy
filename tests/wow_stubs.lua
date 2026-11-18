@@ -36,8 +36,21 @@ resetBugsy()
 
 -- Templates (only what the code reads back).
 WoW.templates.UIPanelScrollFrameTemplate = function(w) w.ScrollBar = newWidget("Slider", w) end
+-- The fields the Options page checks to know a template really built its button (#22).
+WoW.templates.UICheckButtonTemplate = function(w) w.text = newWidget("FontString", w) end
+WoW.templates.UIRadioButtonTemplate = function(w) w.text = newWidget("FontString", w) end
+WoW.templates.UIPanelButtonTemplate = function(w) w.Text = newWidget("FontString", w) end
 
 -- Widget methods the core lacks.
+-- A button's state textures: Set<State>Texture(file) makes the texture Get<State>Texture
+-- returns, as the client does (the Options page's fallback art sets coordinates on it).
+for _, state in ipairs({ "Normal", "Pushed", "Highlight", "Checked", "Disabled" }) do
+    Methods["Set" .. state .. "Texture"] = function(b, file)
+        b["_" .. state] = b["_" .. state] or newWidget("Texture", b)
+        b["_" .. state]._file = file
+    end
+    Methods["Get" .. state .. "Texture"] = function(b) return b["_" .. state] end
+end
 function Methods.HighlightText(e) e._highlighted = true end
 function Methods.SetFocus(e) e._focus = true end
 function Methods.ClearFocus(e) e._focus = false end
@@ -115,7 +128,32 @@ function EventRegistry:TriggerEvent(event, ...)
     for _, c in ipairs(self._cb[event] or {}) do c.fn(c.owner, ...) end
 end
 
+-- Retail's Settings framework, Options > AddOns (#22), recorded in WoW.settings; Blizzard's
+-- Settings window, hidden until opened. Both in the 70959 dump.
+local function resetSettings()
+    WoW.settings = { canvas = {}, addons = {}, subs = {} }
+    SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
+    SettingsPanel:Hide()
+    function SettingsPanel:Close(skipTransition) WoW.settings.closedWith = skipTransition; self:Hide() end
+    Settings = {
+        RegisterCanvasLayoutCategory = function(frame, name)
+            local cat = { frame = frame, name = name, GetID = function() return "cat:" .. name end }
+            WoW.settings.canvas[#WoW.settings.canvas + 1] = cat
+            return cat
+        end,
+        RegisterAddOnCategory = function(cat) WoW.settings.addons[#WoW.settings.addons + 1] = cat end,
+        OpenToCategory = function(id) WoW.settings.opened = id; SettingsPanel:Show() end,
+        RegisterCanvasLayoutSubcategory = function(parent, frame, name)
+            local cat = { parent = parent, frame = frame, name = name }
+            WoW.settings.subs[#WoW.settings.subs + 1] = cat
+            return cat
+        end,
+    }
+end
+table.insert(WoW.onReset, resetSettings)
+resetSettings()
+
 -- The other error collector's public names (Capture.COLLECTOR must match; test_collector checks).
 COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
 
-Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick" })
+Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Settings", "SettingsPanel" })
