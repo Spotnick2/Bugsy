@@ -311,6 +311,13 @@ function UI.Toggle()
     if frame:IsShown() then frame:Hide() else frame:Show() end
 end
 
+-- Shown, never toggled (the Options page's "Open Bugsy", #22).
+function UI.Show()
+    pcall(ns.Capture.check, "window")
+    if not frame then build() end
+    frame:Show()
+end
+
 function UI.ShowProblem(id)
     if not frame then build() end
     state.selected = id

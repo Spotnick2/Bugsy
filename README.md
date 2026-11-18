@@ -26,7 +26,7 @@ error. `/bugsy locals on` captures local variables with new errors (off by defau
 names and messages). `/bugsy status` says how Bugsy is catching errors. A new problem plays a short
 sound and prints one chat line (at most one every 10 s, held during combat). `/bugsy sound` lists
 the six sounds and `/bugsy sound 1-6` picks one; `/bugsy sound off` and `/bugsy notices off` turn
-them off.
+them off. Every setting is also on Bugsy's page in the game's Options > AddOns (`/bugsy options`).
 
 Bugsy replaces your error collector and its viewer: use it instead of them. If another error
 collector is still running (on its own or embedded in another addon), Bugsy reads errors from it

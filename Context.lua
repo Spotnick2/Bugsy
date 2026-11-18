@@ -32,7 +32,10 @@ end
 -- An addon's version from its TOC, capped; nil when unknown.
 function Context.version(name)
     local v = API.AddOnMetadata(name, "Version")
-    if v == "@project-version@" then v = "dev" end
+    -- An "@" means the packager's token is still there (an unpackaged copy). Never the
+    -- whole token in Lua: the packager replaces it here too, which made a packaged
+    -- Bugsy report its own version as "dev" (porting guide, the About page; #22).
+    if v and v:find("@", 1, true) then v = "dev" end
     return capped(v, Context.VERSION_MAX)
 end
 
