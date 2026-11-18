@@ -22,6 +22,8 @@ and its viewer.
 - **Report a problem** that showed no error at all (an empty tab, a failed sync): a guided report
   in three steps, with a searchable addon picker and your game and addon versions added.
 
+![Report a problem, in the WoW Forever look](https://raw.githubusercontent.com/Spotnick2/Bugsy/main/docs/screenshots/report.png)
+
 ## Using it
 
 `/bugsy`, the minimap button or the minimap's addon menu opens the window. The left column lists
