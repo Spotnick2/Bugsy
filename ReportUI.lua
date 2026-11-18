@@ -18,7 +18,8 @@ ns.ReportUI = ReportUI
 ReportUI.TEXT = {
     privacy = L["Bugsy replaces your own character and realm names. Error text and context can still contain other players' names or messages: look before you paste."],
     unknownDestination = L["Bugsy doesn't know where this addon takes reports. Look on its download page (CurseForge, Wago) or its website for an issue tracker or comments."],
-    copyHint = L["Select all, then press Ctrl+C, and paste it where the author asked. Nothing is sent automatically."],
+    -- The bottom bar already says nothing is sent (#31: seen twice in game).
+    copyHint = L["Select all, then press Ctrl+C, and paste it where the author asked."],
     selected = L["Selected: press Ctrl+C now, then paste it into the issue or comment."],
 }
 ReportUI.FORMATS = {

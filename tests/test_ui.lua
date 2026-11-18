@@ -253,6 +253,7 @@ check(v.copyText.edit._text:find('"schema"', 1, true), "JSON as the advanced for
 fire(v.right)
 check(v.copyText.edit._highlighted, "Select all selects it")
 check(v.copyHint:GetText():find("Ctrl+C", 1, true), "and says to press Ctrl+C")
+check(not ReportUI.TEXT.copyHint:find("Nothing is sent", 1, true), "the hint doesn't repeat the bottom bar's 'Nothing is sent' (#31)")
 for _, s in ipairs({ v.copyHint:GetText(), ReportUI.TEXT.copyHint, ReportUI.TEXT.selected }) do
     check(not s:lower():find("copied", 1, true) and not s:lower():find("submitted", 1, true), "never claims it was copied or sent: " .. s)
 end
