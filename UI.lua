@@ -434,7 +434,9 @@ local function buildProblems(f, body)
     f.detailHolder = G("CreateFrame")("Frame", nil, right)
     f.detailHolder:SetPoint("TOPLEFT")
     f.detailHolder:SetPoint("BOTTOMRIGHT", f.actions, "TOPRIGHT", 0, 8)
-    f.detailScroll, f.detail = W.Scroll(f.detailHolder)
+    f.detailScroll, f.detail = W.Scroll(f.detailHolder, function()
+        if frame and frame:IsShown() then layoutDetail() end
+    end)
     f.detailScroll:SetPoint("TOPLEFT")
     f.detailScroll:SetPoint("BOTTOMRIGHT", -22, 0)
     local d = f.detail

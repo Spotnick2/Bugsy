@@ -160,7 +160,9 @@ end
 ------------------------------------------------------------
 
 -- A scroll frame and its child; the bar shows only when there is something to scroll.
-function W.Scroll(parent)
+-- The child is 10 px wide until the scroll frame's first size change gives it its width,
+-- so text measured before that never wraps: onWidth (optional) lays it out again (#36).
+function W.Scroll(parent, onWidth)
     local scroll = create("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
     local child = create("Frame", nil, scroll)
     child:SetSize(10, 10)
@@ -173,7 +175,10 @@ function W.Scroll(parent)
     end
     Theme.ScrollBar(scroll)
     scroll:SetScript("OnSizeChanged", function(self, w)
-        if type(w) == "number" and w > 0 then child:SetWidth(w) end
+        if type(w) == "number" and w > 0 and w ~= child:GetWidth() then
+            child:SetWidth(w)
+            if onWidth then onWidth(w) end
+        end
     end)
     scroll.child = child
     return scroll, child
