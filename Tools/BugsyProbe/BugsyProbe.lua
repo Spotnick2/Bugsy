@@ -770,22 +770,11 @@ local function gateSnapshot(label)
     return t
 end
 
+-- Rev 2: persistence first. The full exit resets taintLog to 0 and the client starts a new
+-- taint.log, while a reload keeps it (70959, 2026-11-18): so the taint part comes after the
+-- relaunch and ends with a reload, and the log is read after the run.
 Probe:Steps("gate", {
-    title = "Release gate: Blizzard's popups hidden (B-18) and a full exit (#33)", rev = 1,
-    { text = "Type /console taintLog 1, then reload (so the taint log covers Bugsy's load).", reload = true },
-    { text = "Recording Bugsy's state: the popups it hid, and taintLog.", auto = true,
-      run = function() local t = gateSnapshot("start"); return true, tostring(t.taintLog) end,
-      check = function() local t = BugsyProbeDB.gate.start
-          return t.taintLog == "1" and t.popupsHidden ~= nil and #t.popupsHidden > 0,
-              "taintLog " .. tostring(t.taintLog) .. "; hidden: " .. table.concat(t.popupsHidden or {}, ", ") end },
-    { text = "Press Run: one forbidden call (TargetUnit). Blizzard's popup should NOT appear.", screenshot = "gate-forbidden",
-      run = function() BugsyProbeDB.gate.forbidBase = diag(FORBID).count or 0; return forbid() end },
-    { text = "Did Blizzard's \"blocked from an action\" popup appear?", ask = true },
-    { text = "Waiting for Bugsy to record the forbidden action.", timeout = 15,
-      wait = function() return (diag(FORBID).count or 0) > BugsyProbeDB.gate.forbidBase, "not recorded yet" end,
-      check = function() local d = diag(FORBID)
-          return (d.count or 0) > BugsyProbeDB.gate.forbidBase, ("count %s (was %s)"):format(tostring(d.count), tostring(BugsyProbeDB.gate.forbidBase)) end },
-    { text = "Play normally for a minute: open your bags, the character pane, the spellbook, the world map and the game menu; target something, and fight one mob if you can. Then press Next." },
+    title = "Release gate: a full exit (#33), then Blizzard's popups hidden (B-18)", rev = 2,
     { text = "Press Run: three errors for the persistence check.",
       run = function()
           raiseLater(GATE.kept, 0.05); raiseLater(GATE.muted, 0.3); raiseLater(GATE.cleared, 0.6)
@@ -794,8 +783,8 @@ Probe:Steps("gate", {
       wait = function()
           for _, m in pairs(GATE) do if (diag(m).count or 0) == 0 then return false, "not recorded yet: " .. m end end
           return true end },
-    { text = "Open /bugsy. Select \"" .. GATE.muted .. "\" and press Mute. Then select \"" .. GATE.cleared
-        .. "\" and use Manage > Clear this problem. Leave \"" .. GATE.kept .. "\" alone. Then press Next." },
+    { text = "Open /bugsy. Select \"" .. GATE.muted .. "\" and press Mute (if it isn't muted already). Then select \""
+        .. GATE.cleared .. "\" and use ... > Clear this problem. Leave \"" .. GATE.kept .. "\" alone. Then press Next." },
     { text = "Recording what Bugsy holds before the exit.", auto = true,
       run = function() gateSnapshot("before"); return true end,
       check = function() local t = BugsyProbeDB.gate.before
@@ -811,7 +800,25 @@ Probe:Steps("gate", {
           return ok, ("session %s -> %s; kept %s -> %s (previous: %s); muted %s; cleared %s"):format(
               tostring(b.session), tostring(a.session), tostring(b.kept.count), tostring(a.kept.count),
               tostring(a.kept.inPrevious), tostring(a.muted.muted), tostring(a.cleared.count)) end },
-    { text = "Type /console taintLog 0 to turn the taint log off again. Anything odd during this run?", ask = true },
+    { text = "Type /console taintLog 1, then reload (so the taint log covers Bugsy's load).", reload = true },
+    { text = "Recording Bugsy's state: the popups it hid, and taintLog.", auto = true,
+      run = function() local t = gateSnapshot("start"); return true, tostring(t.taintLog) end,
+      check = function() local t = BugsyProbeDB.gate.start
+          return t.taintLog == "1" and t.popupsHidden ~= nil and #t.popupsHidden > 0,
+              "taintLog " .. tostring(t.taintLog) .. "; hidden: " .. table.concat(t.popupsHidden or {}, ", ") end },
+    { text = "Press Run: one forbidden call (TargetUnit). Blizzard's popup should NOT appear.", screenshot = "gate-forbidden",
+      run = function() BugsyProbeDB.gate.forbidBase = diag(FORBID).count or 0; return forbid() end },
+    { text = "Did Blizzard's \"blocked from an action\" popup appear?", ask = true },
+    { text = "Waiting for Bugsy to record the forbidden action.", timeout = 15,
+      wait = function()
+          local n = diag(FORBID).count or 0
+          if n > BugsyProbeDB.gate.forbidBase then return true end
+          return false, "not recorded yet" end,
+      check = function() local d = diag(FORBID)
+          return (d.count or 0) > BugsyProbeDB.gate.forbidBase, ("count %s (was %s)"):format(tostring(d.count), tostring(BugsyProbeDB.gate.forbidBase)) end },
+    { text = "Play normally for a minute: open your bags, the character pane, the spellbook, the world map and the game menu; target something, and fight one mob if you can. Then press Next." },
+    { text = "Type /console taintLog 0. Anything odd during this run?", ask = true },
+    { text = "Reload to save the results and write the taint log (a reload keeps it; the next full exit starts a new one).", reload = true },
 })
 
 -- Boot --------------------------------------------------------------------------------------

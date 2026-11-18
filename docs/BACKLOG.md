@@ -56,7 +56,8 @@ or a limitation the owner accepted in writing** in FOREVER-PROBE.md:
 - a save/reload check: evidence, mute and clear state, session rollover and the previous-session
   filter survive a real SavedVariables round trip (a full client exit for persistence);
 - the owner's decision on Blizzard's blocked-action popups without B-18. *Decided 2026-11-18: B-18
-  first (#33), its taint check in the `gate` procedure with the persistence check.*
+  first (#33), its taint check in the `gate` procedure with the persistence check.* **Both passed
+  on 70959, 2026-11-18** (FOREVER-PROBE.md, `gate` rev 1): the gate is met.
 
 ## Phase 1b: the report
 

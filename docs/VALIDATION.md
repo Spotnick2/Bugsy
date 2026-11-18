@@ -58,13 +58,14 @@ Deployed with `pwsh Tools\deploy.ps1 -Probe`. Disable any other error collector 
 | `pause` | **Done, 70959.** #14: the client pauses at the 100th error in one frame (99 twice does not); its notice is not sent at 100 or 101; Bugsy's suspicion at exactly 100; events still captured | for D16 |
 | `frontslow` | **Done, 70959.** #11: under the thresholds nothing trips; one 60 ms pass-on trips; in combat the window trips at 105 ms; capture continues | for D16 |
 | `coexist` | **Done, 70959.** P7: with the collector, collector mode and errors through it; without it, the embedding addon wraps the handler and Bugsy goes front | yes |
-| `popups` | **Done, 70959.** P4: the forbidden function is named (`TargetUnit()`); P10: with Blizzard's listeners unregistered, no popup. Taint of doing so not yet checked (B-18) | owner's decision |
+| `popups` | **Done, 70959.** P4: the forbidden function is named (`TargetUnit()`); P10: with Blizzard's listeners unregistered, no popup. Taint of doing so: `gate` | owner's decision |
+| `gate` | **Done, 70959: passed.** B-18 hides the popup and still records the action; P10: no taint line names `!Bugsy`; a full exit keeps the evidence, mute and clear state, rolls the session and fills the previous-session filter. Rev 2: persistence first (the exit resets `taintLog` and starts a new log) | yes |
 | `copy` | **Done, 70959.** P12: Bugsy's doubled-pipe display copies back to the original exactly (`|`, colour codes, UTF-8); raw text copies what is rendered; 63 KB identical. A tab's fate is unknown | Copy details part |
 | (owner, by hand) | **Done, 70959.** The six alert sounds (#19: 597938, 1859972-1859975, 550736) all play through `/bugsy sound 1-6` | no |
 | (passive) | P3: `LUA_WARNING` over a play session (`/fp bugsy warnings`) | payloads only |
 
-Plus the save/reload check of the release gate (BACKLOG): evidence, mute and clear state, session
-rollover and the previous-session filter across a full client exit.
+The release gate's save/reload check (BACKLOG) is `gate`'s persistence part: evidence, mute and
+clear state, session rollover and the previous-session filter across a full client exit.
 
 ## Reviews
 
