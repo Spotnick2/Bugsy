@@ -40,7 +40,14 @@ table.insert(WoW.onReset, resetBugsy)
 resetBugsy()
 
 -- Templates (only what the code reads back).
-WoW.templates.UIPanelScrollFrameTemplate = function(w) w.ScrollBar = newWidget("Slider", w) end
+-- As the client's template (SecureScrollTemplates.xml): the bar's arrows and thumb by parentKey.
+WoW.templates.UIPanelScrollFrameTemplate = function(w)
+    local bar = newWidget("Slider", w)
+    bar.ScrollUpButton = newWidget("Button", bar)
+    bar.ScrollDownButton = newWidget("Button", bar)
+    bar.ThumbTexture = newWidget("Texture", bar)
+    w.ScrollBar = bar
+end
 -- The fields the Options page checks to know a template really built its button (#22).
 WoW.templates.UICheckButtonTemplate = function(w) w.text = newWidget("FontString", w) end
 WoW.templates.UIRadioButtonTemplate = function(w) w.text = newWidget("FontString", w) end

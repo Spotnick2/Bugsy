@@ -265,13 +265,13 @@ eq(C.state.mode, "front", "but this session still fronts (read once at load)")
 
 -- 11. Status and limits.
 check(ns.Bugsy.Status():find("ahead of another addon", 1, true), "the status says where Bugsy sits")
-check(C.limits()[1]:find("passes each Lua error", 1, true), "the limits say what it does")
-check(C.limits()[2]:find("not recorded", 1, true), "that a distinct report meanwhile is lost")
+check(C.limits()[1]:find("captures each Lua error first, then passes it on", 1, true), "the limits say what it does")
+check(C.limits()[2]:find("counted as dropped", 1, true), "that a distinct report meanwhile is lost")
 check(C.limits()[2]:find("twice", 1, true), "and that a deferred pass-on is recorded twice")
 local changes = ns.Report.ForProblem(ns.Store.List("all", true)[1] or { first = {}, last = {}, callPaths = {} }).capture.handlerChanges
 eq(changes[#changes] and changes[#changes].action, "front", "the report keeps the front transition's action")
 ns.Bugsy.Slash("status")
-check(chatHas("passes each Lua error"), "/bugsy status prints the limits")
+check(chatHas("captures each Lua error first"), "/bugsy status prints the limits")
 local d = ns.Bugsy.Diagnostics("plain")
 eq(d.mode, "front", "Diagnostics: the mode")
 eq(d.fronted, true, "and that the front is installed")

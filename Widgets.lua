@@ -171,6 +171,7 @@ function W.Scroll(parent)
         end)
         scroll.ScrollBar:Hide()
     end
+    Theme.ScrollBar(scroll)
     scroll:SetScript("OnSizeChanged", function(self, w)
         if type(w) == "number" and w > 0 then child:SetWidth(w) end
     end)
@@ -194,6 +195,7 @@ function W.ReadOnly(parent)
         end)
         scroll.ScrollBar:Hide()
     end
+    Theme.ScrollBar(scroll)
     local edit = create("EditBox", nil, scroll)
     edit:SetMultiLine(true)
     edit:SetAutoFocus(false)

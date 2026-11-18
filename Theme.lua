@@ -325,6 +325,46 @@ function Theme.Window(frame, header)
     end
 end
 
+-- Pearl's scroll bar: a slim thumb on a faint track, no arrows; the client's gold arrows and
+-- knob clash with glass (#31). Forever keeps the client's own, which suits it. Blizzard shows
+-- the arrow buttons again on every range change, so they're made invisible and click-through
+-- rather than hidden; the mouse wheel and the thumb still scroll.
+function Theme.ScrollBar(scroll)
+    local bar = scroll and scroll.ScrollBar
+    if effective ~= "glass" or not bar then return end
+    local C = Theme.C
+    for _, key in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
+        local b = bar[key]
+        if b then b:SetAlpha(0); b:EnableMouse(false) end
+    end
+    if bar.ThumbTexture then
+        bar.ThumbTexture:SetColorTexture(C.text[1], C.text[2], C.text[3], 0.35)
+        bar.ThumbTexture:SetSize(5, 36)
+    end
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetColorTexture(1, 1, 1, 0.06)
+    track:SetWidth(3)
+    track:SetPoint("TOP", bar, "TOP", 0, 0)
+    track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
+    bar.glassTrack = track
+end
+
+-- A dropdown's arrow on `tex`: the client's gold scroll button in Forever; in Pearl, its
+-- plain arrow icon, desaturated in the look's muted colour (#31).
+function Theme.DropArrow(tex)
+    if effective == "glass" then
+        local c = Theme.C.muted
+        tex:SetTexture("Interface\\Buttons\\SquareButtonTextures")
+        tex:SetTexCoord(0.45312500, 0.64062500, 0.20312500, 0.01562500)   -- Blizzard's "DOWN"
+        tex:SetDesaturated(true)
+        tex:SetVertexColor(c[1], c[2], c[3])
+        tex:SetSize(12, 12)
+    else
+        tex:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+        tex:SetSize(20, 20)
+    end
+end
+
 -- A reading region on `host` (its own size), drawn behind its content.
 function Theme.Pane(host)
     local C = Theme.C

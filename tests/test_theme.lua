@@ -59,6 +59,13 @@ eq(ns.ReportUI.view().describe.edit:GetText(), "kept across a look change", "and
 ns.ReportUI.Back()
 eq(UI.state.selected, id, "the selection kept")
 check(after.glass ~= nil, "the window wears the glass shell")
+-- Pearl's scroll bars and the picker's arrow are glass, not the client's gold art (#31).
+local rv = ns.ReportUI.view()
+local bar = rv.describeScroll.ScrollBar
+eq(bar.ScrollUpButton:GetAlpha(), 0, "Pearl: the scroll bar's arrows are invisible")
+check(not bar.ScrollDownButton:IsMouseEnabled(), "and click-through (Blizzard shows them again on a range change)")
+check(bar.ThumbTexture._color ~= nil and bar.glassTrack ~= nil, "a slim colour thumb on a track")
+eq(rv.pickerArrow._file, "Interface\\Buttons\\SquareButtonTextures", "the picker's plain arrow")
 -- After the build, states never call LibGlass (Fable's review: no library on refresh).
 local calls = WoW.glassCalls
 check(calls > 0, "LibGlass was used to build")
@@ -78,6 +85,10 @@ UI.state.query = ""
 UI.frame().search:setValue("")
 UI.Refresh()
 eq(T.Effective(), "forever", "the Forever look")
+local fv = ns.ReportUI.view()
+eq(fv.describeScroll.ScrollBar.ScrollUpButton:GetAlpha(), 1, "Forever keeps the client's scroll bar")
+eq(fv.describeScroll.ScrollBar.glassTrack, nil, "with no glass track")
+eq(fv.pickerArrow._file, "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up", "and its gold arrow")
 eq(UI.state.selected, id, "the selection kept again")
 
 -- An older LibGlass (below r11): Pearl not available.

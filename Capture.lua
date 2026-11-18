@@ -733,11 +733,10 @@ local function modeLimits()
         return { "Another addon's error handler passes errors on to Bugsy; stacks may start in its frames.",
             "That addon may keep some errors for itself, or stop passing errors on after a flood." }
     elseif S.mode == "front" then
-        return { "Bugsy is installed ahead of another addon's error handler and passes each Lua error it "
-            .. "receives on to that handler after capturing it.",
-            "A different error that handler reports while it handles one is not recorded (counted as "
-            .. "dropped). If that handler passes errors on later rather than at once, Bugsy records them twice.",
-            "Stacks that handler records may be off by Bugsy's frames." }
+        return { "Bugsy captures each Lua error first, then passes it on to another addon's error handler.",
+            "An error that handler raises while handling one is counted as dropped; one it passes on later "
+            .. "is recorded twice.",
+            "That handler's stacks may include Bugsy's frames." }
     end
     return {}
 end

@@ -108,9 +108,9 @@ local function buildPicker(v, parent)
     glass:SetSize(14, 14)
     glass:SetPoint("LEFT", 10, 0)
     local arrow = v.picker:CreateTexture(nil, "OVERLAY")
-    arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
-    arrow:SetSize(20, 20)
-    arrow:SetPoint("RIGHT", -4, 0)
+    Theme.DropArrow(arrow)
+    arrow:SetPoint("RIGHT", -8, 0)
+    v.pickerArrow = arrow
 
     local panel = G("CreateFrame")("Frame", nil, v)
     panel:SetPoint("TOPLEFT", v.picker, "BOTTOMLEFT", 0, -2)
