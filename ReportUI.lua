@@ -119,6 +119,19 @@ local function build()
     frame.happened = labeled(frame, "What happened?", -86)
     frame.expected = labeled(frame, "What did you expect?", -112)
     frame.steps = labeled(frame, "Steps to make it happen (optional)", -138)
+    -- Tab to the next answer, Shift+Tab to the previous, around the four (#24), as
+    -- Blizzard's own input boxes chain (InputBoxTemplates.lua, EditBox_OnTabPressed).
+    local answers = { frame.doing, frame.happened, frame.expected, frame.steps }
+    for i, box in ipairs(answers) do
+        box.nextBox = answers[i % #answers + 1]
+        box.previousBox = answers[(i - 2) % #answers + 1]
+        box:SetScript("OnTabPressed", function(self)
+            local shift = G("IsShiftKeyDown")
+            local back = shift and shift()
+            local to = back and self.previousBox or self.nextBox
+            if to then to:SetFocus() end
+        end)
+    end
     frame.noProblem = create("CheckButton", nil, frame, "UICheckButtonTemplate")
     frame.noProblem:SetSize(24, 24)
     frame.noProblem:SetPoint("TOPLEFT", 14, -160)
