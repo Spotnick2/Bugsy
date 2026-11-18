@@ -55,6 +55,20 @@ Mutation-test a new test: break the behaviour, see it go red.
 Issue → branch → PR with `Closes #N`; the owner merges. Plans and significant changes get an
 adversarial review (Codex via `/codex-consult`; Fable as a second, independent pass).
 
+## Releasing
+
+`References\Docs\RELEASING.md` is the guide. A tag `vX.Y.Z` does three things:
+- CurseForge (project **1812842**, `X-Curse-Project-ID`) builds its file from the tag, through
+  its webhook. No CurseForge key lives here.
+- CI's `release` job publishes the zip `check` built and checked as a GitHub Release, with
+  `release.json` (`tests/release_files.sh`, the template, unchanged).
+- CI's `wago` job uploads the same zip to Wago Addons (project **mKOajgNx**, `X-Wago-ID`; the
+  `WAGO_API_TOKEN` repo secret, set from the owner's secrets file).
+
+The tag's `## vX.Y.Z` section of `CHANGELOG.md` is the notes. `README.curseforge.md` is
+untracked: the owner pastes it into CurseForge and Wago's Description tab. A release tag updates
+both READMEs in its prep PR (RELEASING.md §3).
+
 ## Consulting Codex
 
 Hand it this file, `docs/`, and the evidence files FOREVER-PROBE.md cites. What is risky here and

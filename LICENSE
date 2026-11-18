@@ -24,18 +24,6 @@ SOFTWARE.
 
 THIRD-PARTY COMPONENTS
 
-The MIT terms above cover Glass Mail's own code. They do NOT relicense the
-libraries bundled under Libs/, which are redistributed under their own terms
-and remain the work of their author:
-
-  Libs/LibGlass-1.0        LibGlass-1.0, copyright (c) 2026 Spotnick2.
-                           MIT License; its own LICENSE ships beside it.
-                           Fetched at build time, not kept in this
-                           repository.
-
-  Libs/LibMailbox-1.0      LibMailbox-1.0, copyright (c) 2026 Spotnick2.
-                           MIT License; its own LICENSE ships beside it.
-                           Fetched at build time, not kept in this
-                           repository.
-
-Both bundle LibStub (public domain), in Libs/<library>/LibStub/.
+None. Bugsy bundles no library: when another addon has loaded LibGlass-1.0,
+LibDataBroker-1.1 or LibDBIcon-1.0, Bugsy uses that copy, and ships none
+itself. Its art (Media/) is its own.

@@ -42,6 +42,16 @@ SlashCmdList.BUGSY("report")
 check(ns.ReportUI.frame():IsShown() and ns.UI.state.view == "report", "/bugsy report opens the manual report, in the window")
 eq(ns.UI.state.draft.addon, nil, "with no addon chosen for the player")
 
+-- The packaged TOC's project IDs: CI's wago job uploads to X-Wago-ID, and the Wago app
+-- matches an installed addon by it (RELEASING.md §1).
+local tocText = io.open("!Bugsy.toc", "rb"):read("*a"):gsub("\r\n", "\n")
+check(tocText:find("\n## X%-Curse%-Project%-ID: 1812842\n"), "the CurseForge project ID")
+check(tocText:find("\n## X%-Wago%-ID: mKOajgNx\n"), "the Wago project ID")
+check(tocText:find("\n## Version: @project%-version@\n"), "the version is the packager's, never a literal")
+local _, interfaces = tocText:gsub("\n## Interface:", "")
+eq(interfaces, 0, "the Interface line is the first line")
+check(tocText:find("^## Interface: 16001\n"), "one Interface: 16001")
+
 -- The release gate's persistence check reads these through Diagnostics (#33).
 WoW.reset()
 local gns = loadAddon()
