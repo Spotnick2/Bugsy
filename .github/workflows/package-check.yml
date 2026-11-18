@@ -97,9 +97,12 @@ jobs:
           zip=$(ls .release/*.zip | head -1)
           echo "$zip"
           unzip -Z1 "$zip" | grep -v '/$' | sort > "$RUNNER_TEMP/got.txt"
+          # The TOC lists top-level files only; a folder in it would need this list to follow.
+          files=$(tr -d '\r' < "$ADDON.toc" | grep -v '^#' | grep -v '^[[:space:]]*$')
+          if printf '%s\n' "$files" | grep -q '[\\/]'; then echo "the TOC lists a file in a folder"; exit 1; fi
           {
             printf '%s\n' "$ADDON/$ADDON.toc" "$ADDON/LICENSE"
-            tr -d '\r' < "$ADDON.toc" | grep -v '^#' | grep -v '^[[:space:]]*$' | sed 's|\|/|g' | sed "s|^|$ADDON/|"
+            printf '%s\n' "$files" | sed "s|^|$ADDON/|"
             for t in Media/*.tga; do echo "$ADDON/$t"; done
           } | sort > "$RUNNER_TEMP/want.txt"
           diff "$RUNNER_TEMP/want.txt" "$RUNNER_TEMP/got.txt" || { echo "the zip differs from the allowlist (< expected, > found)"; exit 1; }
