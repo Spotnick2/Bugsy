@@ -18,3 +18,4 @@ ignore:
   - README.md
   - README.curseforge.md
   - CHANGELOG.md
+  - Media/README.md
