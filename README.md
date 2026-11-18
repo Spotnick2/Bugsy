@@ -21,7 +21,8 @@ understand and reports an author can act on.
 
 ## Using it
 
-`/bugsy` (or the minimap's addon menu) opens the window. `/bugsy report` reports a problem with no
+`/bugsy`, the minimap button or the minimap's addon menu opens the window (right-click: the
+settings; `/bugsy minimap off` hides the button). `/bugsy report` reports a problem with no
 error. `/bugsy locals on` captures local variables with new errors (off by default: they can contain
 names and messages). `/bugsy status` says how Bugsy is catching errors. A new problem plays a short
 sound and prints one chat line (at most one every 10 s, held during combat). `/bugsy sound` lists

@@ -409,8 +409,20 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
   Master channel: a goblin klaxon by default, four metal pops, the earlier hotrod horn;
   `/bugsy sound on|off`, on by default; `/bugsy sound` lists them by name, `/bugsy sound 1-6`
   chooses one and plays it, the setting saving its FileDataID; it follows the notice's throttle
-  and combat hold, and plays even with chat notices off); never opens a window in combat. The minimap's addon
-  compartment opens the window.
+  and combat hold, and plays even with chat notices off); never opens a window in combat.
+- **The minimap button and the compartment** (#26, `Minimap.lua`). **Bugsy embeds no library**
+  (owner): `!Bugsy` loads before every other addon, so an embedded copy would become the copy the
+  whole client runs (LibStub keeps the first of equal versions), and other addons' library errors
+  and taint would point at Bugsy. At `PLAYER_LOGIN` it **borrows** LibDataBroker-1.1 and
+  LibDBIcon-1.0 when another addon loaded them (a launcher; button collectors pick it up), and
+  otherwise makes its own small button on the minimap's ring (LibDBIcon's look and saved fields,
+  so a later session with LibDBIcon keeps its place; the name taken in LibDataBroker: the same).
+  Left-click opens or closes the window, right-click opens the Options page; the tooltip
+  gives this session's problems and the clicks. Its place and shown state are LibDBIcon's own
+  table, `BugsyDB.minimap` (made or repaired once in `Store.adopt`); showing it is the "minimap"
+  setting (`/bugsy minimap on|off`, the Options page). The minimap's addon compartment clicks and
+  shows the tooltip the same way. The TOC's `IconTexture` puts the icon in the addon list: the
+  client's Insect Swarm icon until Bugsy has its own logo. Without a minimap, no button.
 - **Report flow**: (1) what were you doing, what happened, what did you expect, and "I didn't
   notice a visible problem"; (2) a preview of everything included, with the privacy note; (3) where
   to report it (the registered destination, the TOC's `X-Website`, or "Bugsy doesn't know where

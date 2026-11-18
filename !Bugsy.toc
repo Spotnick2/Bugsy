@@ -9,7 +9,10 @@
 ## X-License: MIT
 ## X-Website: https://github.com/Spotnick2/Bugsy
 ## Category: Development Tools
+## IconTexture: Interface\Icons\Spell_Nature_InsectSwarm
 ## AddonCompartmentFunc: Bugsy_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: Bugsy_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: Bugsy_OnAddonCompartmentLeave
 
 Compat.lua
 Json.lua
@@ -24,3 +27,4 @@ UI.lua
 ReportUI.lua
 Bugsy.lua
 Options.lua
+Minimap.lua
