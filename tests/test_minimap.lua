@@ -27,9 +27,9 @@ for _, f in ipairs({ "AddonCompartmentFunc: Bugsy_OnAddonCompartmentClick",
     "AddonCompartmentFuncOnLeave: Bugsy_OnAddonCompartmentLeave" }) do
     check(toc:find(f, 1, true), "the TOC names " .. f)
 end
--- The libraries load after Capture.lua: its handler catches an error while they load.
-local capAt, libAt = toc:find("Capture.lua", 1, true), toc:find("Libs\\LibStub", 1, true)
-check(capAt and libAt and capAt < libAt, "the libraries load after Capture.lua")
+-- No embedded library (#26): the TOC loads no Libs\ file; the button borrows them.
+check(not toc:find("Libs\\", 1, true), "Bugsy embeds no library")
+eq(MM.Kind(), "libdbicon", "with another addon's LibDBIcon: its launcher")
 
 -- Clicks: left toggles the window, right opens the settings.
 obj.OnClick(button, "LeftButton")
@@ -96,48 +96,77 @@ eq(BugsyDB.minimap.hide, nil, "a junk hide dropped")
 eq(BugsyDB.minimap.minimapPos, nil, "a junk place dropped")
 check(WoW.ldbi.buttons.Bugsy:IsShown(), "shown, the default")
 
--- No libraries: no button, nothing thrown, the slash command says so.
+-- No addon brought LibDBIcon: Bugsy's own button on the minimap's ring.
 WoW.reset()
 LibStub = nil
 local ns3 = loadAddon()
-eq(ns3.Minimap.Available(), false, "no libraries: no button")
-WoW.lines = {}
-ns3.Bugsy.Slash("minimap on")
-check(chatHas("couldn't be made"), "/bugsy minimap on says there is none this session")
-eq(BugsyDB.minimap.hide, false, "the choice is still saved")
+eq(ns3.Minimap.Kind(), "own", "no LibDBIcon: Bugsy's own button")
+local own = ns3._test.Minimap.own()
+check(own ~= nil, "made at login")
+eq(own:GetParent(), Minimap, "on the minimap")
+check(own:IsShown(), "shown by default")
+eq(own.icon._file, "Interface\\Icons\\Spell_Nature_InsectSwarm", "the same icon")
+eq(own.border._file, 136430, "the client's tracking border, as other minimap buttons")
+local p = own._points[1]
+eq(p[1], "CENTER", "placed by its centre")
+eq(p[2], Minimap, "on the minimap's centre")
+check(math.abs(p[4] - math.cos(math.rad(225)) * 75) < 0.01 and math.abs(p[5] - math.sin(math.rad(225)) * 75) < 0.01,
+    "at LibDBIcon's default 225 degrees, just past the edge")
 
--- The name taken by another addon: no button, nothing thrown.
+-- Its clicks and tooltip.
+own:GetScript("OnClick")(own, "LeftButton")
+check(ns3.UI.frame() and ns3.UI.frame():IsShown(), "left-click opens the window")
+ns3.UI.frame():Hide()
+own:GetScript("OnClick")(own, "RightButton")
+eq(WoW.settings.opened, "cat:Bugsy", "right-click opens the settings")
+GameTooltip._lines = {}
+own:GetScript("OnEnter")(own)
+check(table.concat(GameTooltip._lines, "\n"):find("Drag", 1, true), "its tooltip says it can be dragged")
+own:GetScript("OnLeave")(own)
+
+-- Dragging: around the ring, following the cursor, saved in minimapPos.
+own:GetScript("OnDragStart")(own)
+WoW.cursorX, WoW.cursorY = 1000, 700          -- straight above the centre (1000, 600)
+own:GetScript("OnUpdate")(own, 0.02)
+check(math.abs(BugsyDB.minimap.minimapPos - 90) < 0.01, "dragged to the top: 90 degrees")
+p = own._points[1]
+check(math.abs(p[4]) < 0.01 and math.abs(p[5] - 75) < 0.01, "and drawn there")
+WoW.minimapScale = 2                           -- a scaled minimap: cursor pixels / scale
+WoW.cursorX, WoW.cursorY = 1800, 1200          -- (900, 600) in its units: straight left
+own:GetScript("OnUpdate")(own, 0.02)
+check(math.abs(BugsyDB.minimap.minimapPos - 180) < 0.01, "the minimap's scale is taken into account")
+own:GetScript("OnDragStop")(own)
+eq(own:GetScript("OnUpdate"), nil, "dropping it stops following the cursor")
+
+-- The setting hides and shows it.
+ns3.Bugsy.Slash("minimap off")
+check(not own:IsShown(), "/bugsy minimap off hides it")
+ns3.Bugsy.Slash("minimap on")
+check(own:IsShown(), "and on shows it")
+
+-- Saved hidden, at a place: a reload keeps both.
+WoW.reset()
+LibStub = nil
+local ns5 = loadAddon({ db = { format = 1, minimap = { hide = true, minimapPos = 0 } } })
+local own5 = ns5._test.Minimap.own()
+check(not own5:IsShown(), "a button saved hidden stays hidden")
+check(math.abs(own5._points[1][4] - 75) < 0.01 and math.abs(own5._points[1][5]) < 0.01, "at its saved place")
+
+-- The name taken in LibDataBroker by another addon: Bugsy's own button instead.
 WoW.reset()
 WoW.ldb.objects.Bugsy = { type = "launcher" }
 local ns4 = loadAddon()
-eq(ns4.Minimap.Available(), false, "the name taken: no button")
+eq(ns4.Minimap.Kind(), "own", "the name taken: Bugsy's own button")
 eq(WoW.ldbi.registered.Bugsy, nil, "nothing registered with LibDBIcon")
 
--- Stack evidence (#13's R5): the embedded libraries are not Bugsy's own.
-local Sig, Attr = ns4.Signature, ns4.Attribution
-local own = "[Interface/AddOns/!Bugsy/UI.lua]:12: in function <Interface/AddOns/!Bugsy/UI.lua:10>"
-local libLine = "[Interface/AddOns/!Bugsy/Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua]:88: in function <Interface/AddOns/!Bugsy/Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua:80>"
-local other = "[Interface/AddOns/TestAddon/Core.lua]:10: in function <Interface/AddOns/TestAddon/Core.lua:5>"
-check(Sig.isOwnFrame(own), "a Bugsy file is Bugsy's own")
-check(not Sig.isOwnFrame(libLine), "a library in Bugsy's Libs/ is not")
-local l1 = Sig.lines(own .. "\n" .. other)
-eq(l1[1], other, "Bugsy's leading frames are still skipped (unchanged)")
-local l2 = Sig.lines(libLine .. "\n" .. other)
-eq(l2[1], libLine, "an embedded library's frame keeps its place")
-eq(Sig.where(l2), "!Bugsy/Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua:88", "and is the problem's location")
-eq(Sig.ALGO, "g1", "the algorithm stays g1 (the recorded exception)")
--- Existing groupings unchanged: a stack without Libs/ groups exactly as before.
-local before = { Sig.compute("error", "boom", own .. "\n" .. other) }
-local again = { Sig.compute("error", "boom", other) }
-eq(before[2], again[2], "a Bugsy frame on top still doesn't change the grouping")
-
-local a1 = Attr.attribute({ kind = "error", message = "x", stack = libLine })
-eq(a1.suspect and a1.suspect.library, "LibDBIcon-1.0", "only library frames: the library is named")
-eq(a1.suspect and a1.suspect.addon, "!Bugsy", "with its host, Bugsy")
-eq(a1.suspect and a1.suspect.confidence, "low", "at low confidence")
-local a2 = Attr.attribute({ kind = "error", message = "x", stack = libLine .. "\n" .. other })
-eq(a2.suspect and a2.suspect.addon, "TestAddon", "an addon frame under the library is the suspect")
-local a3 = Attr.attribute({ kind = "error", message = "x", stack = own })
-eq(a3.suspect, nil, "Bugsy's own frames alone suspect nothing (unchanged)")
+-- No minimap at all: no button, nothing thrown, the slash command says so.
+WoW.reset()
+LibStub = nil
+Minimap = nil
+local ns6 = loadAddon()
+eq(ns6.Minimap.Available(), false, "no minimap: no button")
+WoW.lines = {}
+ns6.Bugsy.Slash("minimap on")
+check(chatHas("couldn't be made"), "/bugsy minimap on says there is none this session")
 
 done("test_minimap")

@@ -153,10 +153,10 @@ end
 table.insert(WoW.onReset, resetSettings)
 resetSettings()
 
--- The embedded libraries (#26) are never loaded in tests: LibStub hands out recording
--- fakes of LibDataBroker-1.1 and LibDBIcon-1.0 (as Gnomesweeper's stub, modelled on
+-- Another addon's LibDataBroker-1.1 and LibDBIcon-1.0 (#26: Bugsy borrows them, never
+-- embeds them): LibStub hands out recording fakes (as Gnomesweeper's stub, modelled on
 -- LibDBIcon MINOR 56: Show/Hide only show or hide the button, never the saved table).
--- WoW.ldb.objects, WoW.ldbi.registered / .buttons; WoW.noLibs = true: no LibStub at all.
+-- WoW.ldb.objects, WoW.ldbi.registered / .buttons. `LibStub = nil`: no addon brought them.
 function WoW.newLDB()
     local lib = { objects = {} }
     function lib:NewDataObject(name, obj)
@@ -186,6 +186,13 @@ local function resetLibs()
         if major == "LibDBIcon-1.0" then return WoW.ldbi end
         if not silent then error("Cannot find a library instance of " .. tostring(major)) end
     end })
+    -- The client's minimap (in the dump), for Bugsy's own button: its centre in UI units
+    -- and its effective scale, which the kit doesn't model.
+    Minimap = newWidget("Minimap", UIParent, "Minimap")
+    Minimap:SetSize(140, 140)
+    function Minimap:GetCenter() return 1000, 600 end
+    function Minimap:GetEffectiveScale() return WoW.minimapScale or 1 end
+    WoW.minimapScale = 1
     GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
     GameTooltip._lines = {}
     function GameTooltip:AddLine(text) self._lines[#self._lines + 1] = text end
@@ -196,4 +203,4 @@ resetLibs()
 -- The other error collector's public names (Capture.COLLECTOR must match; test_collector checks).
 COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
 
-Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip" })
+Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip", "Minimap" })

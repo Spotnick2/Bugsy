@@ -46,5 +46,4 @@ the report format, [docs/LIBRARY.md](docs/LIBRARY.md) the planned author library
 [docs/FOREVER-PROBE.md](docs/FOREVER-PROBE.md) what is verified and what is still to be measured
 in game. Tests: `pwsh tests\run.ps1`.
 
-MIT licensed. Embedded libraries, each under its own licence in `Libs\`: LibStub,
-CallbackHandler-1.0, LibDataBroker-1.1 and LibDBIcon-1.0.
+MIT licensed.

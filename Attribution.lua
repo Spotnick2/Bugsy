@@ -77,12 +77,10 @@ function Attr.attribute(occ)
     end
 
     -- First choice: the first non-Bugsy, non-Blizzard, non-library frame from the
-    -- top. Fallback: the host of the first embedded library copy (low). A library
-    -- embedded in Bugsy's own folder (#26) counts as a library, never as Bugsy: the
-    -- winning copy's folder doesn't say who used it.
+    -- top. Fallback: the host of the first embedded library copy (low).
     local suspect, libraryHost
     for _, f in ipairs(frames) do
-        if (f.folder ~= ADDON or f.isLibrary) and not isBlizzard(f.folder) then
+        if f.folder ~= ADDON and not isBlizzard(f.folder) then
             if not f.isLibrary then
                 suspect = { addon = f.folder, confidence = "medium",
                     evidence = { "heuristic: first addon frame from the top of the stack" } }
