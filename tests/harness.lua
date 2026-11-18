@@ -13,7 +13,10 @@ function loadAddon(opts)
     opts = opts or {}
     local ns = {}
     for _, file in ipairs(tocFiles()) do
-        assert(loadfile((file:gsub("\\", "/"))))(ADDON_NAME, ns)
+        -- The embedded libraries (#26) are faked by the stub's LibStub, never loaded.
+        if not file:match("^Libs/") then
+            assert(loadfile((file:gsub("\\", "/"))))(ADDON_NAME, ns)
+        end
     end
     if opts.before then opts.before(ns) end
     BugsyDB = opts.db

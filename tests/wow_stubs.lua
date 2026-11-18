@@ -153,7 +153,47 @@ end
 table.insert(WoW.onReset, resetSettings)
 resetSettings()
 
+-- The embedded libraries (#26) are never loaded in tests: LibStub hands out recording
+-- fakes of LibDataBroker-1.1 and LibDBIcon-1.0 (as Gnomesweeper's stub, modelled on
+-- LibDBIcon MINOR 56: Show/Hide only show or hide the button, never the saved table).
+-- WoW.ldb.objects, WoW.ldbi.registered / .buttons; WoW.noLibs = true: no LibStub at all.
+function WoW.newLDB()
+    local lib = { objects = {} }
+    function lib:NewDataObject(name, obj)
+        if self.objects[name] then return nil end          -- the name taken
+        self.objects[name] = obj
+        return obj
+    end
+    return lib
+end
+function WoW.newLDBI()
+    local lib = { registered = {}, buttons = {} }
+    function lib:Register(name, obj, db)
+        local b = newWidget("Button", UIParent, "LibDBIcon10_" .. name)
+        b._scripts.OnClick = function(self, mouse) obj.OnClick(self, mouse) end
+        b.dataObject, b.db = obj, db
+        if db.hide then b:Hide() end
+        self.registered[name], self.buttons[name] = db, b
+    end
+    function lib:Show(name) self.buttons[name]:Show() end
+    function lib:Hide(name) self.buttons[name]:Hide() end
+    return lib
+end
+local function resetLibs()
+    WoW.ldb, WoW.ldbi = WoW.newLDB(), WoW.newLDBI()
+    LibStub = setmetatable({}, { __call = function(_, major, silent)
+        if major == "LibDataBroker-1.1" then return WoW.ldb end
+        if major == "LibDBIcon-1.0" then return WoW.ldbi end
+        if not silent then error("Cannot find a library instance of " .. tostring(major)) end
+    end })
+    GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
+    GameTooltip._lines = {}
+    function GameTooltip:AddLine(text) self._lines[#self._lines + 1] = text end
+end
+table.insert(WoW.onReset, resetLibs)
+resetLibs()
+
 -- The other error collector's public names (Capture.COLLECTOR must match; test_collector checks).
 COLLECTOR = { global = "BugGrabber", event = "BugGrabber.BugGrabbed" }
 
-Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Settings", "SettingsPanel" })
+Kit.strict({ "BugsyDB", "Bugsy", COLLECTOR.global, "SLASH_BUGSY1", "Bugsy_OnAddonCompartmentClick", "Bugsy_OnAddonCompartmentEnter", "Bugsy_OnAddonCompartmentLeave", "Settings", "SettingsPanel", "LibStub", "GameTooltip" })

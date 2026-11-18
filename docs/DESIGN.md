@@ -223,7 +223,9 @@ evidence, so a re-capture of the same error always yields the same signature.
   was defined (porting guide, "Who wrote a chat line"). Also parsed: unbracketed paths, shortened
   `[...AddOns/X/...]` paths, bare `[X/f.lua]:763` frames, and `[string "@Interface/AddOns/..."]`
   file chunks. A `[string "..."]` without `@` is a code chunk, and a shortened path that hides the
-  folder (`[...f.lua]`) is not a location. The leading run of Bugsy's own frames is skipped.
+  folder (`[...f.lua]`) is not a location. The leading run of Bugsy's own frames is skipped;
+  a library embedded in Bugsy's folder (`!Bugsy/Libs/...`, #26) is not Bugsy's own and keeps
+  its location, as any library does.
 - **Exact signature**: kind + the message + the 12 stack lines, hashed.
 - **Grouping signature** (g1): kind + `addressless(message)` + the **first location** (the faulting
   line), else the first stack line, else nothing. One bug reached from different callers is one
@@ -235,6 +237,9 @@ evidence, so a re-capture of the same error always yields the same signature.
   `builtin: %x%x%x%x%x%x%x%x+` → `builtin: ?`. Eight hex digits or more, so ordinary text such as
   "table: expected" is untouched. Numbers, names and quoted text are kept.
 - `sigAlgo = "g1"`. Any rule change bumps it; problems of another algorithm are never merged.
+  **One narrow exception (#26, agreed in #13's design review):** `!Bugsy/Libs/` frames stopped
+  counting as Bugsy's own without a bump. No shipped Bugsy version produced such a location (none
+  shipped a library), so no saved signature changes; tests pin the existing cases unchanged.
 - **Versions are not in the signature** (a cross-account and cross-release match stays possible).
   Each occurrence keeps the versions of the addons involved; the problem keeps a bounded
   `versions` map (version → count, 10 entries, then "other"). A report never presents an old
@@ -409,8 +414,16 @@ under "Possible explanation (not a diagnosis)". Initial rules, worded to their e
   Master channel: a goblin klaxon by default, four metal pops, the earlier hotrod horn;
   `/bugsy sound on|off`, on by default; `/bugsy sound` lists them by name, `/bugsy sound 1-6`
   chooses one and plays it, the setting saving its FileDataID; it follows the notice's throttle
-  and combat hold, and plays even with chat notices off); never opens a window in combat. The minimap's addon
-  compartment opens the window.
+  and combat hold, and plays even with chat notices off); never opens a window in combat.
+- **The minimap button and the compartment** (#26, `Minimap.lua`): a LibDataBroker launcher shown
+  by LibDBIcon (embedded in `Libs\`, loaded after `Capture.lua` so an error while they load is
+  caught). Left-click opens or closes the window, right-click opens the Options page; the tooltip
+  gives this session's problems and the clicks. Its place and shown state are LibDBIcon's own
+  table, `BugsyDB.minimap` (made or repaired once in `Store.adopt`); showing it is the "minimap"
+  setting (`/bugsy minimap on|off`, the Options page). The minimap's addon compartment clicks and
+  shows the tooltip the same way. The TOC's `IconTexture` puts the icon in the addon list: the
+  client's Insect Swarm icon until Bugsy has its own logo. Without the libraries, or with the
+  name taken, there is no button and nothing else changes.
 - **Report flow**: (1) what were you doing, what happened, what did you expect, and "I didn't
   notice a visible problem"; (2) a preview of everything included, with the privacy note; (3) where
   to report it (the registered destination, the TOC's `X-Website`, or "Bugsy doesn't know where

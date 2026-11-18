@@ -171,6 +171,11 @@ function Store.adopt(saved)
     saved.settings.sound = saved.settings.sound ~= false
     -- the chosen alert sound's FileDataID (#19); Bugsy.lua maps an unknown one to the default
     if type(saved.settings.soundId) ~= "number" then saved.settings.soundId = nil end
+    -- The minimap button's place and shown state: LibDBIcon's own table (#26). Made or
+    -- repaired here, once: LibDBIcon keeps a reference to it, so it's never replaced after.
+    if type(saved.minimap) ~= "table" then saved.minimap = {} end
+    if saved.minimap.hide ~= nil and type(saved.minimap.hide) ~= "boolean" then saved.minimap.hide = nil end
+    if saved.minimap.minimapPos ~= nil and type(saved.minimap.minimapPos) ~= "number" then saved.minimap.minimapPos = nil end
     saved.settings.front = saved.settings.front ~= false
 
     local problems = type(saved.problems) == "table" and saved.problems or {}

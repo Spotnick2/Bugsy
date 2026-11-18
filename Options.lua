@@ -197,6 +197,11 @@ local function buildPage()
     end
     y = y - 10
 
+    y = heading(canvas, y, "Minimap")
+    y = toggle(canvas, y, "minimap", "Show the minimap button",
+        "Left-click opens Bugsy, right-click this page. Drag it around the minimap.")
+    y = y - 4
+
     y = heading(canvas, y, "Capture")
     y = toggle(canvas, y, "locals", "Capture local variables with errors",
         "Off by default: they can contain names and messages. Applies to new errors.")

@@ -21,7 +21,8 @@ understand and reports an author can act on.
 
 ## Using it
 
-`/bugsy` (or the minimap's addon menu) opens the window. `/bugsy report` reports a problem with no
+`/bugsy`, the minimap button or the minimap's addon menu opens the window (right-click: the
+settings; `/bugsy minimap off` hides the button). `/bugsy report` reports a problem with no
 error. `/bugsy locals on` captures local variables with new errors (off by default: they can contain
 names and messages). `/bugsy status` says how Bugsy is catching errors. A new problem plays a short
 sound and prints one chat line (at most one every 10 s, held during combat). `/bugsy sound` lists
@@ -45,4 +46,5 @@ the report format, [docs/LIBRARY.md](docs/LIBRARY.md) the planned author library
 [docs/FOREVER-PROBE.md](docs/FOREVER-PROBE.md) what is verified and what is still to be measured
 in game. Tests: `pwsh tests\run.ps1`.
 
-MIT licensed.
+MIT licensed. Embedded libraries, each under its own licence in `Libs\`: LibStub,
+CallbackHandler-1.0, LibDataBroker-1.1 and LibDBIcon-1.0.

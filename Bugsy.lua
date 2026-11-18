@@ -198,15 +198,23 @@ local function settingsChanged()
     if ns.Options and ns.Options.Refresh then ns.Options.Refresh() end
 end
 
+-- "minimap" (#26) is LibDBIcon's own table, BugsyDB.minimap.hide, not a setting.
 function Bugsy.Get(key)
     local db = Store.db()
-    return db and db.settings[key]
+    if not db then return nil end
+    if key == "minimap" then return db.minimap.hide ~= true end
+    return db.settings[key]
 end
 
 function Bugsy.SetSetting(key, on)
     local db = Store.db()
-    if not (db and Bugsy.TOGGLES[key] and type(on) == "boolean") then return false end
-    db.settings[key] = on
+    if not (db and (Bugsy.TOGGLES[key] or key == "minimap") and type(on) == "boolean") then return false end
+    if key == "minimap" then
+        db.minimap.hide = not on
+        if ns.Minimap then ns.Minimap.Apply() end
+    else
+        db.settings[key] = on
+    end
     if key == "sound" and on then playSound(db) end
     settingsChanged()
     return true
@@ -248,6 +256,7 @@ local HELP = {
     "/bugsy sound 1-6 - choose that sound (plays it); /bugsy sound lists them",
     "/bugsy status - how Bugsy is catching errors",
     "/bugsy options - open Bugsy's page in Options > AddOns",
+    "/bugsy minimap on|off - the minimap button",
     "/bugsy front on|off - catch errors ahead of another addon's error handler (on by default; from the next session)",
 }
 Bugsy.HELP = HELP
@@ -290,6 +299,10 @@ function Bugsy.Slash(msg)
             .. (((arg == "on" or arg == "off") and " from the next session (/reload).") or "."))
     elseif cmd == "status" then
         for _, l in ipairs(Bugsy.StatusLines()) do say(l) end
+    elseif cmd == "minimap" then
+        local on = setting("minimap", arg)
+        say("the minimap button is " .. (on and "shown." or "hidden.")
+            .. ((on and ns.Minimap and not ns.Minimap.Available()) and " (It couldn't be made this session.)" or ""))
     elseif cmd == "options" or cmd == "settings" or cmd == "config" then
         if not (ns.Options and ns.Options.Open()) then
             say("the settings are in the game's Options > AddOns > Bugsy.")
@@ -302,11 +315,6 @@ end
 _G.SLASH_BUGSY1 = "/bugsy"
 local slash = G("SlashCmdList")
 if slash then slash.BUGSY = Bugsy.Slash end
-
--- The minimap's addon compartment (TOC: AddonCompartmentFunc).
-function _G.Bugsy_OnAddonCompartmentClick()
-    if ns.UI then ns.UI.Toggle() end
-end
 
 ns._test = ns._test or {}
 ns._test.Bugsy = Bugsy

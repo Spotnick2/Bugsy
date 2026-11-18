@@ -1,6 +1,6 @@
 -- Signature.lua: exact and grouping signatures, and the message key (DESIGN.md §4,
 -- REPORT-SCHEMA.md "Signatures"). Pure functions over strings the caller has
--- already checked are readable. ALGO names the rules: any change bumps it, and
+-- already checked are readable. ALGO names the rules: any change bumps it (one recorded exception, #26: own()), and
 -- problems of another algorithm are never merged with these.
 
 local _, ns = ...
@@ -107,9 +107,13 @@ function Sig.location(line)
 end
 
 local OWN = (select(1, ...))   -- our folder name ("!Bugsy")
+-- Bugsy's own code, not a library embedded in its folder (#26, #13's R5): a frame in
+-- !Bugsy/Libs/... keeps its location in the signature, as any library's does. No shipped
+-- Bugsy had a Libs/ folder, so no saved signature changes: g1 is kept (DESIGN §6).
 own = function(line)
     local rel = Sig.parseFrame(line)
     return rel ~= nil and OWN ~= nil and rel:sub(1, #OWN + 1) == OWN .. "/"
+        and rel:sub(#OWN + 2, #OWN + 6) ~= "Libs/"
 end
 Sig.isOwnFrame = own
 
